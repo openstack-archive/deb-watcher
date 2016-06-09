@@ -1,0 +1,13 @@
+Description: Also package Alembic migration scripts
+Author: Thomas Goirand <zigo@debian.org>
+Forwarded: no
+Last-Update: 2016-06-09
+
+--- watcher-0.27.0.orig/MANIFEST.in
++++ watcher-0.27.0/MANIFEST.in
+@@ -4,3 +4,4 @@ exclude .gitignore
+ exclude .gitreview
+ 
+ global-exclude *.pyc
++recursive-include watcher/db *
+\ No newline at end of file
