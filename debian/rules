@@ -12,6 +12,8 @@ override_dh_auto_install:
 override_dh_install:
 	python2.7 setup.py install --install-layout=deb --root $(CURDIR)/debian/tmp
 
+	rm -rf $(CURDIR)/debian/tmp/usr/etc
+
 	mkdir -p $(CURDIR)/debian/watcher-common/usr/share/watcher-common
 	PYTHONPATH=$(CURDIR)/debian/tmp/usr/lib/python2.7/dist-packages oslo-config-generator \
 		--output-file $(CURDIR)/debian/watcher-common/usr/share/watcher-common/watcher.conf \
