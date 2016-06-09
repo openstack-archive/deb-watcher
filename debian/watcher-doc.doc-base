@@ -1,0 +1,9 @@
+Document: watcher
+Title: watcher Documentation
+Author: N/A
+Abstract: Sphinx documentation for Watcher
+Section: Programming/Python
+
+Format: HTML
+Index: /usr/share/doc/watcher-doc/html/index.html
+Files: /usr/share/doc/watcher-doc/html/*

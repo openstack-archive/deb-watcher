@@ -1,0 +1,62 @@
+# These templates have been reviewed by the debian-l10n-english
+# team
+#
+# If modifications/additions/rewording are needed, please ask
+# debian-l10n-english@lists.debian.org for advice.
+#
+# Even minor modifications require translation updates and such
+# changes should be coordinated with translators and reviewers.
+
+Template: watcher/register-endpoint
+Type: boolean
+Default: false
+_Description: Register Watcher in the Keystone endpoint catalog?
+ Each OpenStack service (each API) should be registered in order to be
+ accessible. This is done using "keystone service-create" and "keystone
+ endpoint-create". This can be done automatically now.
+ .
+ Note that you will need to have an up and running Keystone server on which to
+ connect using the Keystone authentication token.
+
+Template: watcher/keystone-ip
+Type: string
+_Description: Keystone server IP address:
+ Please enter the IP address of the Keystone server, so that watcher-api can
+ contact Keystone to do the Watcher service and endpoint creation.
+
+Template: watcher/keystone-admin-name
+Type: string
+Default: admin
+_Description: Keystone admin name:
+ To register the service endpoint, this package needs to know the Admin login,
+ name, project name, and password to the Keystone server.
+
+Template: watcher/keystone-project-name
+Type: string
+Default: admin
+_Description: Keystone admin project name:
+ To register the service endpoint, this package needs to know the Admin login,
+ name, project name, and password to the Keystone server.
+
+Template: watcher/keystone-admin-password
+Type: password
+_Description: Keystone admin password:
+ To register the service endpoint, this package needs to know the Admin login,
+ name, project name, and password to the Keystone server.
+
+Template: watcher/endpoint-ip
+Type: string
+_Description: Watcher endpoint IP address:
+ Please enter the IP address that will be used to contact Watcher.
+ .
+ This IP address should be accessible from the clients that will use this
+ service, so if you are installing a public cloud, this should be a public
+ IP address.
+
+Template: watcher/region-name
+Type: string
+Default: regionOne
+_Description: Name of the region to register:
+ OpenStack supports using availability zones, with each region representing
+ a location. Please enter the zone that you wish to use when registering the
+ endpoint.

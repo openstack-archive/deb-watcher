@@ -1,0 +1,31 @@
+#!/bin/sh
+
+set -e
+
+if [ "$1" = "purge" ] && [ -f /usr/share/debconf/confmodule ] ; then
+	if [ -f /usr/share/debconf/confmodule ] ; then
+		. /usr/share/debconf/confmodule
+
+		db_get watcher/configure_db || true
+		if [ "$RET" = "true" ]; then
+			if [ -f /usr/share/dbconfig-common/dpkg/postrm ]; then
+				. /usr/share/dbconfig-common/dpkg/postrm
+				dbc_go watcher-common $@
+			else
+				rm -f /etc/dbconfig-common/watcher-common.conf
+				if which ucf >/dev/null 2>&1; then
+					ucf --purge /etc/dbconfig-common/watcher-common.conf
+					ucfr --purge watcher-common /etc/dbconfig-common/watcher-common.conf
+				fi
+			fi
+		fi
+	fi
+
+	rm -f /etc/watcher/watcher.conf /etc/watcher/policy.json
+	rmdir --ignore-fail-on-non-empty /etc/watcher || true
+	rm -rf /var/lib/watcher /var/log/watcher
+fi
+
+#DEBHELPER#
+
+exit 0

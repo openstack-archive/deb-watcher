@@ -1,0 +1,196 @@
+Source: watcher
+Section: net
+Priority: extra
+Maintainer: PKG OpenStack <openstack-devel@lists.alioth.debian.org>
+Uploaders: Thomas Goirand <zigo@debian.org>,
+Build-Depends: debhelper (>= 9),
+               dh-python,
+               dh-systemd,
+               openstack-pkg-tools (>= 40~),
+               po-debconf,
+               python-all,
+               python-pbr (>= 1.8),
+               python-setuptools,
+               python-sphinx,
+Build-Depends-Indep: python-ceilometerclient (>= 2.2.1),
+                     python-cinderclient (>= 1.6.0),
+                     python-coverage,
+                     python-enum34,
+                     python-freezegun,
+                     python-glanceclient (>= 2.0.0),
+                     python-hacking,
+                     python-jsonpatch (>= 1.1),
+                     python-keystoneauth1 (>= 2.1.0),
+                     python-keystoneclient (>= 1.7.0),
+                     python-keystonemiddleware (>= 4.0.0),
+                     python-mock (>= 2.0),
+                     python-neutronclient (>= 4.2.0),
+                     python-novaclient (>= 2.29.0),
+                     python-openstackclient (>= 2.1.0),
+                     python-os-testr (>= 0.4.1),
+                     python-oslo.cache (>= 1.5.0),
+                     python-oslo.concurrency (>= 3.8.0),
+                     python-oslo.config (>= 3.9.0),
+                     python-oslo.context (>= 2.2.0),
+                     python-oslo.db (>= 4.1.0),
+                     python-oslo.i18n (>= 2.1.0),
+                     python-oslo.log (>= 1.14.0),
+                     python-oslo.messaging (>= 4.5.0),
+                     python-oslo.policy (>= 0.5.0),
+                     python-oslo.reports (>= 0.6.0),
+                     python-oslo.service (>= 1.10.0),
+                     python-oslo.utils (>= 3.5.0),
+                     python-oslosphinx (>= 2.5.0),
+                     python-oslotest (>= 1.10.0),
+                     python-pastedeploy (>= 1.5.0),
+                     python-pbr (>= 1.8),
+                     python-pecan (>= 1.0.0),
+                     python-prettytable,
+                     python-six (>= 1.9.0),
+                     python-sphinxcontrib-pecanwsme,
+                     python-sqlalchemy (>= 1.0.10),
+                     python-stevedore (>= 1.10.0),
+                     python-taskflow (>= 1.26.0),
+                     python-testscenarios,
+                     python-testtools (>= 1.4.0),
+                     python-voluptuous (>= 0.8.9),
+                     python-webob,
+                     python-wsme (>= 0.8),
+                     subunit,
+                     testrepository,
+Standards-Version: 3.9.8
+Vcs-Browser: https://anonscm.debian.org/cgit/openstack/watcher.git/
+Vcs-Git: https://anonscm.debian.org/git/openstack/watcher.git
+Homepage: https://github.com/openstack/watcher
+
+Package: python-watcher
+Section: python
+Architecture: all
+Depends: python-ceilometerclient (>= 2.2.1),
+         python-cinderclient (>= 1.6.0),
+         python-enum34,
+         python-glanceclient (>= 2.0.0),
+         python-jsonpatch (>= 1.1),
+         python-keystoneauth1 (>= 2.1.0),
+         python-keystoneclient (>= 1.7.0),
+         python-keystonemiddleware (>= 4.0.0),
+         python-neutronclient (>= 4.2.0),
+         python-novaclient (>= 2.29.0),
+         python-openstackclient (>= 2.1.0),
+         python-oslo.cache (>= 1.5.0),
+         python-oslo.concurrency (>= 3.8.0),
+         python-oslo.config (>= 3.9.0),
+         python-oslo.context (>= 2.2.0),
+         python-oslo.db (>= 4.1.0),
+         python-oslo.i18n (>= 2.1.0),
+         python-oslo.log (>= 1.14.0),
+         python-oslo.messaging (>= 4.5.0),
+         python-oslo.policy (>= 0.5.0),
+         python-oslo.reports (>= 0.6.0),
+         python-oslo.service (>= 1.10.0),
+         python-oslo.utils (>= 3.5.0),
+         python-pastedeploy (>= 1.5.0),
+         python-pbr (>= 1.8),
+         python-pecan (>= 1.0.0),
+         python-prettytable,
+         python-six (>= 1.9.0),
+         python-sqlalchemy (>= 1.0.10),
+         python-stevedore (>= 1.10.0),
+         python-taskflow (>= 1.26.0),
+         python-voluptuous (>= 0.8.9),
+         python-webob,
+         python-wsme (>= 0.8),
+         ${misc:Depends},
+         ${python:Depends},
+Description: OpenStack Cloud Optimization as a Service - Python 2.7 libraries
+ OpenStack Watcher provides a flexible and scalable resource optimization
+ service for multi-tenant OpenStack-based clouds. Watcher provides a complete
+ optimization loop-including everything from a metrics receiver, complex event
+ processor and profiler, optimization processor and an action plan applier.
+ This provides a robust framework to realize a wide range of cloud optimization
+ goals, including the reduction of data center operating costs, increased
+ system performance via intelligent virtual machine migration, increased energy
+ efficiency-and more!
+ .
+ This package contains the Python 2.7 libraries that are part of Watcher.
+
+Package: watcher-common
+Architecture: all
+Depends: adduser,
+         dbconfig-common,
+         debconf,
+         python-watcher (= ${binary:Version}),
+         sqlite3,
+         ${misc:Depends},
+         ${python:Depends},
+Description: OpenStack Cloud Optimization as a Service - common files
+ OpenStack Watcher provides a flexible and scalable resource optimization
+ service for multi-tenant OpenStack-based clouds. Watcher provides a complete
+ optimization loop-including everything from a metrics receiver, complex event
+ processor and profiler, optimization processor and an action plan applier.
+ This provides a robust framework to realize a wide range of cloud optimization
+ goals, including the reduction of data center operating costs, increased
+ system performance via intelligent virtual machine migration, increased energy
+ efficiency-and more!
+ .
+ This package contains common files and configuration that are
+ needed by all the daemon packages of Watcher.
+
+Package: watcher-api
+Architecture: all
+Depends: adduser,
+         watcher-common (= ${binary:Version}),
+         debconf,
+         python-keystoneclient,
+         python-openstackclient,
+         q-text-as-data,
+         ${misc:Depends},
+         ${ostack-lsb-base},
+         ${python:Depends},
+Description: OpenStack Cloud Optimization as a Service - API server
+ OpenStack Watcher provides a flexible and scalable resource optimization
+ service for multi-tenant OpenStack-based clouds. Watcher provides a complete
+ optimization loop-including everything from a metrics receiver, complex event
+ processor and profiler, optimization processor and an action plan applier.
+ This provides a robust framework to realize a wide range of cloud optimization
+ goals, including the reduction of data center operating costs, increased
+ system performance via intelligent virtual machine migration, increased energy
+ efficiency-and more!
+ .
+ This package contains the Watcher API server.
+
+Package: watcher-decision-engine
+Architecture: all
+Depends: watcher-common (= ${binary:Version}),
+         ${misc:Depends},
+         ${ostack-lsb-base},
+         ${python:Depends},
+Description: OpenStack Cloud Optimization as a Service - Decision Engine
+ OpenStack Watcher provides a flexible and scalable resource optimization
+ service for multi-tenant OpenStack-based clouds. Watcher provides a complete
+ optimization loop-including everything from a metrics receiver, complex event
+ processor and profiler, optimization processor and an action plan applier.
+ This provides a robust framework to realize a wide range of cloud optimization
+ goals, including the reduction of data center operating costs, increased
+ system performance via intelligent virtual machine migration, increased energy
+ efficiency-and more!
+ .
+ This package contains the Watcher decision engine.
+
+Package: watcher-applier
+Architecture: all
+Depends: watcher-common (= ${binary:Version}),
+         ${misc:Depends},
+         ${ostack-lsb-base},
+         ${python:Depends},
+Description: OpenStack Cloud Optimization as a Service - Applier
+ OpenStack Watcher provides a flexible and scalable resource optimization
+ service for multi-tenant OpenStack-based clouds. Watcher provides a complete
+ optimization loop-including everything from a metrics receiver, complex event
+ processor and profiler, optimization processor and an action plan applier.
+ This provides a robust framework to realize a wide range of cloud optimization
+ goals, including the reduction of data center operating costs, increased
+ system performance via intelligent virtual machine migration, increased energy
+ efficiency-and more!
+ .
+ This package contains the Watcher Applier.

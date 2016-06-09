@@ -1,0 +1,17 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          watcher-applier
+# Required-Start:    $network $local_fs $remote_fs $syslog
+# Required-Stop:     $remote_fs
+# Should-Start:      postgresql mysql keystone rabbitmq-server ntp
+# Should-Stop:       postgresql mysql keystone rabbitmq-server ntp
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: watcher-applier
+# Description:       watcher-applier
+### END INIT INFO
+
+# Author: Thomas Goirand <zigo@debian.org>
+DESC="OpenStack Watcher Applier"
+PROJECT_NAME=watcher
+NAME=${PROJECT_NAME}-applier

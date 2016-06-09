@@ -1,0 +1,15 @@
+#!/bin/sh
+
+set -e
+
+#PKGOS-INCLUDE#
+
+if [ "$1" = "configure" ]  || [ "$1" = "reconfigure" ] ; then
+	. /usr/share/debconf/confmodule
+	pkgos_register_endpoint_postinst watcher watcher infra-optim "Infrastructure Optimization service" 9322 ""
+	db_stop
+fi
+
+#DEBHELPER#
+
+exit 0

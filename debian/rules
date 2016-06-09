@@ -1,0 +1,66 @@
+#!/usr/bin/make -f
+
+include /usr/share/openstack-pkg-tools/pkgos.make
+export OSLO_PACKAGE_VERSION=$(shell dpkg-parsechangelog -SVersion | sed -e 's/^[[:digit:]]*://' -e 's/[-].*//' -e 's/~/.0/' | head -n 1)
+
+%:
+	dh $@ --buildsystem=python_distutils --with python2,systemd,sphinxdoc
+
+override_dh_auto_install:
+	echo "Do nothing..."
+
+override_dh_install:
+	python2.7 setup.py install --install-layout=deb --root $(CURDIR)/debian/tmp
+
+	mkdir -p $(CURDIR)/debian/watcher-common/usr/share/watcher-common
+	PYTHONPATH=$(CURDIR)/debian/tmp/usr/lib/python2.7/dist-packages oslo-config-generator \
+		--output-file $(CURDIR)/debian/watcher-common/usr/share/watcher-common/watcher.conf \
+		--wrap-width 140 \
+		--namespace watcher \
+		--namespace keystonemiddleware.auth_token \
+		--namespace oslo.log \
+		--namespace oslo.db \
+		--namespace oslo.messaging
+	dh_install --fail-missing
+
+	# Disable https in default setup, as this makes our CI fail
+	pkgos-fix-config-default $(CURDIR)/debian/watcher-common/usr/share/watcher-common/watcher.conf keystone_authtoken auth_protocol http
+
+	# Fix the missing sql_connection directive
+	pkgos-fix-config-default $(CURDIR)/debian/watcher-common/usr/share/watcher-common/watcher.conf database sqlite:////var/lib/watcher/watcherdb
+
+override_dh_auto_test:
+ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
+	@echo "===> Running tests"
+	set -e ; set -x ; for i in 2.7 ; do \
+		PYMAJOR=`echo $$i | cut -d'.' -f1` ; \
+		echo "===> Testing with python$$i (python$$PYMAJOR)" ; \
+		rm -rf .testrepository ; \
+		testr-python$$PYMAJOR init ; \
+		TEMP_REZ=`mktemp -t` ; \
+		PYTHONPATH=$(CURDIR) PYTHON=python$$i testr-python$$PYMAJOR run --subunit | tee $$TEMP_REZ | subunit2pyunit ; \
+		cat $$TEMP_REZ | subunit-filter -s --no-passthrough | subunit-stats ; \
+		rm -f $$TEMP_REZ ; \
+		testr-python$$PYMAJOR slowest ; \
+	done
+endif
+
+override_dh_clean:
+	dh_clean -O--buildsystem=python_distutils
+	rm -f debian/watcher-common.config debian/watcher-common.postinst debian/watcher-api.config debian/watcher-api.postinst
+	rm -rf debian/*.upstart debian/*.service
+
+override_dh_auto_build:
+	dh_auto_build -O--buildsystem=python_distutils
+
+	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func watcher-common.config
+	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func watcher-common.postinst
+	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func watcher-api.config
+	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func watcher-api.postinst
+
+override_dh_sphinxdoc:
+ifeq (,$(findstring nodocs, $(DEB_BUILD_OPTIONS)))
+	python setup.py build_sphinx
+	cp -rf doc/build/html $(CURDIR)/debian/watcher-doc/usr/share/doc/watcher-doc
+	dh_sphinxdoc -O--buildsystem=python_distutils
+endif

@@ -1,0 +1,34 @@
+#!/bin/sh
+
+set -e
+
+WATCHER_CONF=/etc/watcher/watcher.conf
+
+#PKGOS-INCLUDE#
+
+if [ "$1" = "configure" ] || [ "$1" = "reconfigure" ] ; then
+	. /usr/share/debconf/confmodule
+	. /usr/share/dbconfig-common/dpkg/postinst
+
+	pkgos_var_user_group watcher
+
+	pkgos_write_new_conf watcher policy.json
+	pkgos_write_new_conf watcher watcher.conf
+	db_get watcher/configure_db
+	if [ "$RET" = "true" ]; then
+		pkgos_dbc_postinst ${WATCHER_CONF} database connection watcher $@
+	fi
+	pkgos_rabbit_write_conf ${WATCHER_CONF} oslo_messaging_rabbit watcher
+	pkgos_write_admin_creds ${WATCHER_CONF} keystone_authtoken watcher
+
+	db_get watcher/configure_db
+	if [ "$RET" = "true" ]; then
+		echo "Now calling watcher-db-manage --config-file /etc/watcher/watcher.conf create_schema: this may take a while..."
+		su -s /bin/sh -c 'watcher-db-manage --config-file /etc/watcher/watcher.conf create_schema' watcher
+	fi
+	db_stop
+fi
+
+#DEBHELPER#
+
+exit 0

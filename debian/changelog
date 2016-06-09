@@ -1,0 +1,5 @@
+watcher (0.27.0-1) experimental; urgency=medium
+
+  * Initial release.
+
+ -- Thomas Goirand <zigo@debian.org>  Thu, 09 Jun 2016 16:03:10 +0200

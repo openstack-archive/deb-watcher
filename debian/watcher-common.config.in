@@ -1,0 +1,17 @@
+#!/bin/sh
+
+set -e
+
+. /usr/share/debconf/confmodule
+WATCHER_CONF=/etc/watcher/watcher.conf
+
+#PKGOS-INCLUDE#
+
+pkgos_var_user_group watcher
+pkgos_dbc_read_conf -pkg watcher-common ${WATCHER_CONF} database connection watcher $@
+pkgos_rabbit_read_conf ${WATCHER_CONF} oslo_messaging_rabbit watcher
+pkgos_read_admin_creds ${WATCHER_CONF} keystone_authtoken watcher
+
+db_go
+
+exit 0
