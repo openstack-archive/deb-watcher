@@ -6,6 +6,19 @@ export OSLO_PACKAGE_VERSION=$(shell dpkg-parsechangelog -SVersion | sed -e 's/^[
 %:
 	dh $@ --buildsystem=python_distutils --with python2,systemd,sphinxdoc
 
+override_dh_clean:
+	dh_clean
+	rm -f debian/watcher-common.config debian/watcher-common.postinst debian/watcher-api.config debian/watcher-api.postinst
+	rm -rf debian/*.upstart debian/*.service
+
+override_dh_auto_build:
+	dh_auto_build -O--buildsystem=python_distutils
+
+	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func watcher-common.config
+	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func watcher-common.postinst
+	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func watcher-api.config
+	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func watcher-api.postinst
+
 override_dh_auto_install:
 	echo "Do nothing..."
 
@@ -47,22 +60,10 @@ ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
 	done
 endif
 
-override_dh_clean:
-	dh_clean -O--buildsystem=python_distutils
-	rm -f debian/watcher-common.config debian/watcher-common.postinst debian/watcher-api.config debian/watcher-api.postinst
-	rm -rf debian/*.upstart debian/*.service
-
-override_dh_auto_build:
-	dh_auto_build -O--buildsystem=python_distutils
-
-	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func watcher-common.config
-	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func watcher-common.postinst
-	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func watcher-api.config
-	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func watcher-api.postinst
 
 override_dh_sphinxdoc:
 ifeq (,$(findstring nodocs, $(DEB_BUILD_OPTIONS)))
-	python setup.py build_sphinx
-	cp -rf doc/build/html $(CURDIR)/debian/watcher-doc/usr/share/doc/watcher-doc
-	dh_sphinxdoc -O--buildsystem=python_distutils
+	PYTHONPATH=. sphinx-build $(SPHINXOPTS) -b html doc/source $(CURDIR)/debian/watcher-doc/usr/share/doc/watcher-doc/html
+	touch $(CURDIR)/debian/watcher-doc/usr/share/doc/watcher-doc/html/_static/toggle.js
+	dh_sphinxdoc
 endif
