@@ -3,8 +3,11 @@ Upstream-Name: watcher
 Source: https://github.com/openstack/watcher
 
 Files: *
-Copyright: (c) 2014-2016, OpenStack Foundation <openstack-dev@lists.openstack.org>
-           (c) Others (See individual files for more details)
+Copyright: (c) 2012-2016, OpenStack Foundation <openstack-dev@lists.openstack.org>
+           (c) 2015-2016, Intel Corp
+           (c) 2016, Servionica LLC
+           (c) 2012, NTT DOCOMO, INC.
+           (c) 2013, Hewlett-Packard Development Company, L.P.
 License: Apache-2.0
 
 Files: debian/*
