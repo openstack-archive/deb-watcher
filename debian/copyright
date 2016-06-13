@@ -7,7 +7,16 @@ Copyright: (c) 2012-2016, OpenStack Foundation <openstack-dev@lists.openstack.or
            (c) 2015-2016, Intel Corp
            (c) 2016, Servionica LLC
            (c) 2012, NTT DOCOMO, INC.
-           (c) 2013, Hewlett-Packard Development Company, L.P.
+           (c) 2012-2013, Hewlett-Packard Development Company, L.P.
+           (c) 2012-2014, Red Hat, Inc.
+           (c) 2016, Servionica LLC
+           (c) 2013, IBM Corp.
+           (c) 2014, Rackspace Hosting
+           (c) 2015-2016, b<>com
+           (c) 2012, New Dream Network, LLC (DreamHost)
+           (c) 2012, eNovance <licensing@enovance.com>
+           (c) 2010, US Government as represented by the Administrator of NASA
+           (c) 2014, The Cloudscaling Group, Inc.
 License: Apache-2.0
 
 Files: debian/*

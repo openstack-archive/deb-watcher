@@ -1,3 +1,9 @@
+watcher (0.27.0-2) experimental; urgency=medium
+
+  * Fixed debian/copyright missing copyright holders.
+
+ -- Thomas Goirand <zigo@debian.org>  Mon, 13 Jun 2016 08:40:12 +0000
+
 watcher (0.27.0-1) experimental; urgency=medium
 
   * Initial release. (Closes: #826853)
