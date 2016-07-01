@@ -140,6 +140,7 @@ Architecture: all
 Depends: adduser,
          watcher-common (= ${binary:Version}),
          debconf,
+         net-tools,
          python-keystoneclient,
          python-openstackclient,
          q-text-as-data,
