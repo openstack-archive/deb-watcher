@@ -44,6 +44,7 @@ from watcher.api.controllers.v1 import collection
 from watcher.api.controllers.v1 import types
 from watcher.api.controllers.v1 import utils as api_utils
 from watcher.common import exception
+from watcher.common import policy
 from watcher.common import utils
 from watcher.decision_engine import rpcapi
 from watcher import objects
@@ -53,29 +54,54 @@ class AuditPostType(wtypes.Base):
 
     audit_template_uuid = wtypes.wsattr(types.uuid, mandatory=True)
 
-    type = wtypes.wsattr(wtypes.text, mandatory=True)
+    audit_type = wtypes.wsattr(wtypes.text, mandatory=True)
 
     deadline = wtypes.wsattr(datetime.datetime, mandatory=False)
 
     state = wsme.wsattr(wtypes.text, readonly=True,
                         default=objects.audit.State.PENDING)
 
+    parameters = wtypes.wsattr({wtypes.text: types.jsontype}, mandatory=False,
+                               default={})
+    interval = wsme.wsattr(int, mandatory=False)
+
     def as_audit(self):
         audit_type_values = [val.value for val in objects.audit.AuditType]
-        if self.type not in audit_type_values:
-            raise exception.AuditTypeNotFound(audit_type=self.type)
+        if self.audit_type not in audit_type_values:
+            raise exception.AuditTypeNotFound(audit_type=self.audit_type)
+
+        if (self.audit_type == objects.audit.AuditType.ONESHOT.value and
+           self.interval != wtypes.Unset):
+            raise exception.AuditIntervalNotAllowed(audit_type=self.audit_type)
+
+        if (self.audit_type == objects.audit.AuditType.CONTINUOUS.value and
+           self.interval == wtypes.Unset):
+            raise exception.AuditIntervalNotSpecified(
+                audit_type=self.audit_type)
 
         return Audit(
             audit_template_id=self.audit_template_uuid,
-            type=self.type,
-            deadline=self.deadline)
+            audit_type=self.audit_type,
+            deadline=self.deadline,
+            parameters=self.parameters,
+            interval=self.interval)
 
 
 class AuditPatchType(types.JsonPatchType):
 
     @staticmethod
     def mandatory_attrs():
-        return ['/audit_template_uuid']
+        return ['/audit_template_uuid', '/type']
+
+    @staticmethod
+    def validate(patch):
+        serialized_patch = {'path': patch.path, 'op': patch.op}
+        if patch.path in AuditPatchType.mandatory_attrs():
+            msg = _("%(field)s can't be updated.")
+            raise exception.PatchError(
+                patch=serialized_patch,
+                reason=msg % dict(field=patch.path))
+        return types.JsonPatchType.validate(patch)
 
 
 class Audit(base.APIBase):
@@ -127,7 +153,7 @@ class Audit(base.APIBase):
     uuid = types.uuid
     """Unique UUID for this audit"""
 
-    type = wtypes.text
+    audit_type = wtypes.text
     """Type of this audit"""
 
     deadline = datetime.datetime
@@ -148,8 +174,14 @@ class Audit(base.APIBase):
                                           mandatory=False)
     """The name of the audit template this audit refers to"""
 
+    parameters = {wtypes.text: types.jsontype}
+    """The strategy parameters for this audit"""
+
     links = wsme.wsattr([link.Link], readonly=True)
     """A list containing a self link and associated audit links"""
+
+    interval = wsme.wsattr(int, mandatory=False)
+    """Launch audit periodically (in seconds)"""
 
     def __init__(self, **kwargs):
         self.fields = []
@@ -176,9 +208,9 @@ class Audit(base.APIBase):
     @staticmethod
     def _convert_with_links(audit, url, expand=True):
         if not expand:
-            audit.unset_fields_except(['uuid', 'type', 'deadline',
+            audit.unset_fields_except(['uuid', 'audit_type', 'deadline',
                                        'state', 'audit_template_uuid',
-                                       'audit_template_name'])
+                                       'audit_template_name', 'interval'])
 
         # The numeric ID should not be exposed to
         # the user, it's internal only.
@@ -201,12 +233,13 @@ class Audit(base.APIBase):
     @classmethod
     def sample(cls, expand=True):
         sample = cls(uuid='27e3153e-d5bf-4b7e-b517-fb518e17f34c',
-                     type='ONESHOT',
+                     audit_type='ONESHOT',
                      state='PENDING',
                      deadline=None,
                      created_at=datetime.datetime.utcnow(),
                      deleted_at=None,
-                     updated_at=datetime.datetime.utcnow())
+                     updated_at=datetime.datetime.utcnow(),
+                     interval=7200)
         sample._audit_template_uuid = '7ae81bb3-dec3-4289-8d6c-da80bd8001ae'
         return cls._convert_with_links(sample, 'http://localhost:9322', expand)
 
@@ -295,34 +328,41 @@ class AuditsController(rest.RestController):
                                                   sort_key=sort_key,
                                                   sort_dir=sort_dir)
 
-    @wsme_pecan.wsexpose(AuditCollection, types.uuid, int, wtypes.text,
+    @wsme_pecan.wsexpose(AuditCollection, wtypes.text, types.uuid, int,
                          wtypes.text, wtypes.text)
-    def get_all(self, marker=None, limit=None,
-                sort_key='id', sort_dir='asc', audit_template=None):
+    def get_all(self, audit_template=None, marker=None, limit=None,
+                sort_key='id', sort_dir='asc'):
         """Retrieve a list of audits.
 
+        :param audit_template: Optional UUID or name of an audit
         :param marker: pagination marker for large data sets.
         :param limit: maximum number of resources to return in a single result.
         :param sort_key: column to sort results by. Default: id.
         :param sort_dir: direction to sort. "asc" or "desc". Default: asc.
-        :param audit_template: Optional UUID or name of an audit
          template, to get only audits for that audit template.
         """
+        context = pecan.request.context
+        policy.enforce(context, 'audit:get_all',
+                       action='audit:get_all')
         return self._get_audits_collection(marker, limit, sort_key,
                                            sort_dir,
                                            audit_template=audit_template)
 
-    @wsme_pecan.wsexpose(AuditCollection, types.uuid, int, wtypes.text,
-                         wtypes.text)
-    def detail(self, marker=None, limit=None,
+    @wsme_pecan.wsexpose(AuditCollection, wtypes.text, types.uuid, int,
+                         wtypes.text, wtypes.text)
+    def detail(self, audit_template=None, marker=None, limit=None,
                sort_key='id', sort_dir='asc'):
         """Retrieve a list of audits with detail.
 
+        :param audit_template: Optional UUID or name of an audit
         :param marker: pagination marker for large data sets.
         :param limit: maximum number of resources to return in a single result.
         :param sort_key: column to sort results by. Default: id.
         :param sort_dir: direction to sort. "asc" or "desc". Default: asc.
         """
+        context = pecan.request.context
+        policy.enforce(context, 'audit:detail',
+                       action='audit:detail')
         # NOTE(lucasagomes): /detail should only work agaist collections
         parent = pecan.request.path.split('/')[:-1][-1]
         if parent != "audits":
@@ -332,7 +372,8 @@ class AuditsController(rest.RestController):
         resource_url = '/'.join(['audits', 'detail'])
         return self._get_audits_collection(marker, limit,
                                            sort_key, sort_dir, expand,
-                                           resource_url)
+                                           resource_url,
+                                           audit_template=audit_template)
 
     @wsme_pecan.wsexpose(Audit, types.uuid)
     def get_one(self, audit_uuid):
@@ -343,8 +384,10 @@ class AuditsController(rest.RestController):
         if self.from_audits:
             raise exception.OperationNotPermitted
 
-        rpc_audit = objects.Audit.get_by_uuid(pecan.request.context,
-                                              audit_uuid)
+        context = pecan.request.context
+        rpc_audit = api_utils.get_resource('Audit', audit_uuid)
+        policy.enforce(context, 'audit:get', rpc_audit, action='audit:get')
+
         return Audit.convert_with_links(rpc_audit)
 
     @wsme_pecan.wsexpose(Audit, body=AuditPostType, status_code=201)
@@ -353,6 +396,10 @@ class AuditsController(rest.RestController):
 
         :param audit_p: a audit within the request body.
         """
+        context = pecan.request.context
+        policy.enforce(context, 'audit:create',
+                       action='audit:create')
+
         audit = audit_p.as_audit()
         if self.from_audits:
             raise exception.OperationNotPermitted
@@ -361,6 +408,25 @@ class AuditsController(rest.RestController):
             raise exception.Invalid(
                 message=_('The audit template UUID or name specified is '
                           'invalid'))
+
+        audit_template = objects.AuditTemplate.get(pecan.request.context,
+                                                   audit._audit_template_uuid)
+        strategy_id = audit_template.strategy_id
+        no_schema = True
+        if strategy_id is not None:
+            # validate parameter when predefined strategy in audit template
+            strategy = objects.Strategy.get(pecan.request.context, strategy_id)
+            schema = strategy.parameters_spec
+            if schema:
+                # validate input parameter with default value feedback
+                no_schema = False
+                utils.DefaultValidatingDraft4Validator(schema).validate(
+                    audit.parameters)
+
+        if no_schema and audit.parameters:
+            raise exception.Invalid(_('Specify parameters but no predefined '
+                                      'strategy for audit template, or no '
+                                      'parameter spec in predefined strategy'))
 
         audit_dict = audit.as_dict()
         context = pecan.request.context
@@ -372,8 +438,9 @@ class AuditsController(rest.RestController):
 
         # trigger decision-engine to run the audit
 
-        dc_client = rpcapi.DecisionEngineAPI()
-        dc_client.trigger_audit(context, new_audit.uuid)
+        if new_audit.audit_type == objects.audit.AuditType.ONESHOT.value:
+            dc_client = rpcapi.DecisionEngineAPI()
+            dc_client.trigger_audit(context, new_audit.uuid)
 
         return Audit.convert_with_links(new_audit)
 
@@ -387,6 +454,12 @@ class AuditsController(rest.RestController):
         """
         if self.from_audits:
             raise exception.OperationNotPermitted
+
+        context = pecan.request.context
+        audit_to_update = api_utils.get_resource('Audit',
+                                                 audit_uuid)
+        policy.enforce(context, 'audit:update', audit_to_update,
+                       action='audit:update')
 
         audit_to_update = objects.Audit.get_by_uuid(pecan.request.context,
                                                     audit_uuid)
@@ -417,8 +490,9 @@ class AuditsController(rest.RestController):
 
         :param audit_uuid: UUID of a audit.
         """
+        context = pecan.request.context
+        audit_to_delete = api_utils.get_resource('Audit', audit_uuid)
+        policy.enforce(context, 'audit:update', audit_to_delete,
+                       action='audit:update')
 
-        audit_to_delete = objects.Audit.get_by_uuid(
-            pecan.request.context,
-            audit_uuid)
         audit_to_delete.soft_delete()

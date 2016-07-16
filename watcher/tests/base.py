@@ -29,6 +29,7 @@ import testscenarios
 from watcher.common import context as watcher_context
 from watcher.objects import base as objects_base
 from watcher.tests import conf_fixture
+from watcher.tests import policy_fixture
 
 
 CONF = cfg.CONF
@@ -49,6 +50,7 @@ class TestCase(BaseTestCase):
 
     def setUp(self):
         super(TestCase, self).setUp()
+        self.useFixture(conf_fixture.ConfReloadFixture())
         self.app = testing.load_test_app(os.path.join(
             os.path.dirname(__file__),
             'config.py'
@@ -67,6 +69,8 @@ class TestCase(BaseTestCase):
             auth_token_info=token_info,
             project_id='fake_project',
             user_id='fake_user')
+
+        self.policy = self.useFixture(policy_fixture.PolicyFixture())
 
         def make_context(*args, **kwargs):
             # If context hasn't been constructed with token_info

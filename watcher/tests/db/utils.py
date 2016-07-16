@@ -54,13 +54,15 @@ def get_test_audit(**kwargs):
     return {
         'id': kwargs.get('id', 1),
         'uuid': kwargs.get('uuid', '10a47dd1-4874-4298-91cf-eff046dbdb8d'),
-        'type': kwargs.get('type', 'ONESHOT'),
+        'audit_type': kwargs.get('audit_type', 'ONESHOT'),
         'state': kwargs.get('state'),
         'deadline': kwargs.get('deadline'),
         'audit_template_id': kwargs.get('audit_template_id', 1),
         'created_at': kwargs.get('created_at'),
         'updated_at': kwargs.get('updated_at'),
         'deleted_at': kwargs.get('deleted_at'),
+        'parameters': kwargs.get('parameters', {}),
+        'interval': kwargs.get('period', 3600),
     }
 
 
@@ -120,6 +122,7 @@ def get_test_action_plan(**kwargs):
         'uuid': kwargs.get('uuid', '76be87bd-3422-43f9-93a0-e85a577e3061'),
         'state': kwargs.get('state', 'ONGOING'),
         'audit_id': kwargs.get('audit_id', 1),
+        'global_efficacy': kwargs.get('global_efficacy', {}),
         'first_action_id': kwargs.get('first_action_id', 1),
         'created_at': kwargs.get('created_at'),
         'updated_at': kwargs.get('updated_at'),
@@ -151,6 +154,7 @@ def get_test_goal(**kwargs):
         'created_at': kwargs.get('created_at'),
         'updated_at': kwargs.get('updated_at'),
         'deleted_at': kwargs.get('deleted_at'),
+        'efficacy_specification': kwargs.get('efficacy_specification', []),
     }
 
 
@@ -176,6 +180,7 @@ def get_test_strategy(**kwargs):
         'created_at': kwargs.get('created_at'),
         'updated_at': kwargs.get('updated_at'),
         'deleted_at': kwargs.get('deleted_at'),
+        'parameters_spec': kwargs.get('parameters_spec', {})
     }
 
 
@@ -189,3 +194,33 @@ def create_test_strategy(**kwargs):
     strategy = get_test_strategy(**kwargs)
     dbapi = db_api.get_instance()
     return dbapi.create_strategy(strategy)
+
+
+def get_test_efficacy_indicator(**kwargs):
+    return {
+        'id': kwargs.get('id', 1),
+        'uuid': kwargs.get('uuid', '202cfcf9-811c-411a-8a35-d8351f64eb24'),
+        'name': kwargs.get('name', 'test_indicator'),
+        'description': kwargs.get('description', 'Test indicator'),
+        'unit': kwargs.get('unit', '%'),
+        'value': kwargs.get('value', 0),
+        'action_plan_id': kwargs.get('action_plan_id', 1),
+        'created_at': kwargs.get('created_at'),
+        'updated_at': kwargs.get('updated_at'),
+        'deleted_at': kwargs.get('deleted_at'),
+    }
+
+
+def create_test_efficacy_indicator(**kwargs):
+    """Create and return a test efficacy indicator entry in DB.
+
+    Function to be used to create test EfficacyIndicator objects in the DB.
+    :param kwargs: kwargs for overriding the values of the attributes
+    :returns: Test EfficacyIndicator DB object.
+    """
+    efficacy_indicator = get_test_efficacy_indicator(**kwargs)
+    # Let DB generate ID if it isn't specified explicitly
+    if 'id' not in kwargs:
+        del efficacy_indicator['id']
+    dbapi = db_api.get_instance()
+    return dbapi.create_efficacy_indicator(efficacy_indicator)

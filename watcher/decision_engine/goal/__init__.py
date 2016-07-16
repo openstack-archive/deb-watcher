@@ -1,5 +1,5 @@
 # -*- encoding: utf-8 -*-
-# Copyright (c) 2015 b<>com
+# Copyright (c) 2016 b<>com
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,14 +13,14 @@
 # implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
 
-from __future__ import unicode_literals
+from watcher.decision_engine.goal import goals
 
-from watcher.common.loader import default
+Dummy = goals.Dummy
+ServerConsolidation = goals.ServerConsolidation
+ThermalOptimization = goals.ThermalOptimization
+Unclassified = goals.Unclassified
+WorkloadBalancing = goals.WorkloadBalancing
 
-
-class DefaultPlannerLoader(default.DefaultLoader):
-    def __init__(self):
-        super(DefaultPlannerLoader, self).__init__(
-            namespace='watcher_planners')
+__all__ = ("Dummy", "ServerConsolidation", "ThermalOptimization",
+           "Unclassified", "WorkloadBalancing", )

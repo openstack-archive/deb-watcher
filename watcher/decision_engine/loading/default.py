@@ -1,6 +1,8 @@
 # -*- encoding: utf-8 -*-
 # Copyright (c) 2015 b<>com
 #
+# Authors: Jean-Emile DARTOIS <jean-emile.dartois@b-com.com>
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -17,9 +19,23 @@
 
 from __future__ import unicode_literals
 
+
 from watcher.common.loader import default
 
 
-class DefaultActionLoader(default.DefaultLoader):
+class DefaultStrategyLoader(default.DefaultLoader):
     def __init__(self):
-        super(DefaultActionLoader, self).__init__(namespace='watcher_actions')
+        super(DefaultStrategyLoader, self).__init__(
+            namespace='watcher_strategies')
+
+
+class DefaultGoalLoader(default.DefaultLoader):
+    def __init__(self):
+        super(DefaultGoalLoader, self).__init__(
+            namespace='watcher_goals')
+
+
+class DefaultPlannerLoader(default.DefaultLoader):
+    def __init__(self):
+        super(DefaultPlannerLoader, self).__init__(
+            namespace='watcher_planners')

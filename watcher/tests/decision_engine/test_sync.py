@@ -18,10 +18,11 @@ import mock
 
 from watcher.common import context
 from watcher.common import utils
-from watcher.decision_engine.strategy.loading import default
+from watcher.decision_engine.loading import default
 from watcher.decision_engine import sync
 from watcher import objects
 from watcher.tests.db import base
+from watcher.tests.decision_engine import fake_goals
 from watcher.tests.decision_engine import fake_strategies
 
 
@@ -43,12 +44,33 @@ class TestSyncer(base.DbTestCase):
                 fake_strategies.FakeDummy2Strategy4,
         })
 
+        self.m_available_goals = mock.Mock(return_value={
+            fake_goals.FakeDummy1.get_name(): fake_goals.FakeDummy1,
+            fake_goals.FakeDummy2.get_name(): fake_goals.FakeDummy2,
+        })
+
+        self.goal1_spec = fake_goals.FakeDummy1(
+            config=mock.Mock()).get_efficacy_specification()
+        self.goal2_spec = fake_goals.FakeDummy2(
+            config=mock.Mock()).get_efficacy_specification()
+
+        p_goals_load = mock.patch.object(
+            default.DefaultGoalLoader, 'load',
+            side_effect=lambda goal: self.m_available_goals()[goal]())
+        p_goals = mock.patch.object(
+            default.DefaultGoalLoader, 'list_available',
+            self.m_available_goals)
         p_strategies = mock.patch.object(
             default.DefaultStrategyLoader, 'list_available',
             self.m_available_strategies)
+
+        p_goals.start()
+        p_goals_load.start()
         p_strategies.start()
 
         self.syncer = sync.Syncer()
+        self.addCleanup(p_goals.stop)
+        self.addCleanup(p_goals_load.stop)
         self.addCleanup(p_strategies.stop)
 
     @mock.patch.object(objects.Strategy, "soft_delete")
@@ -94,7 +116,9 @@ class TestSyncer(base.DbTestCase):
             objects.Goal(self.ctx, id=i) for i in range(1, 10)]
         m_g_list.return_value = [
             objects.Goal(self.ctx, id=1, uuid=utils.generate_uuid(),
-                         name="DUMMY_1", display_name="Dummy 1")
+                         name="dummy_1", display_name="Dummy 1",
+                         efficacy_specification=(
+                             self.goal1_spec.serialize_indicators_specs()))
         ]
         m_s_list.return_value = []
 
@@ -124,11 +148,14 @@ class TestSyncer(base.DbTestCase):
             objects.Goal(self.ctx, id=i) for i in range(1, 10)]
         m_g_list.return_value = [
             objects.Goal(self.ctx, id=1, uuid=utils.generate_uuid(),
-                         name="DUMMY_1", display_name="Dummy 1")
+                         name="dummy_1", display_name="Dummy 1",
+                         efficacy_specification=(
+                             self.goal1_spec.serialize_indicators_specs()))
         ]
         m_s_list.return_value = [
-            objects.Strategy(self.ctx, id=1, name="STRATEGY_1",
-                             goal_id=1, display_name="Strategy 1")
+            objects.Strategy(self.ctx, id=1, name="strategy_1",
+                             goal_id=1, display_name="Strategy 1",
+                             parameters_spec='{}')
         ]
         self.syncer.sync()
 
@@ -154,10 +181,11 @@ class TestSyncer(base.DbTestCase):
             m_g_get_by_name, m_s_list, m_s_create, m_s_save, m_s_soft_delete):
         m_g_get_by_name.side_effect = [
             objects.Goal(self.ctx, id=i) for i in range(1, 10)]
-        m_g_list.return_value = [
-            objects.Goal(self.ctx, id=1, uuid=utils.generate_uuid(),
-                         name="DUMMY_2", display_name="original")
-        ]
+        m_g_list.return_value = [objects.Goal(
+            self.ctx, id=1, uuid=utils.generate_uuid(),
+            name="dummy_2", display_name="original",
+            efficacy_specification=self.goal2_spec.serialize_indicators_specs()
+        )]
         m_s_list.return_value = []
         self.syncer.sync()
 
@@ -185,11 +213,14 @@ class TestSyncer(base.DbTestCase):
             objects.Goal(self.ctx, id=i) for i in range(1, 10)]
         m_g_list.return_value = [
             objects.Goal(self.ctx, id=1, uuid=utils.generate_uuid(),
-                         name="DUMMY_1", display_name="Dummy 1")
+                         name="dummy_1", display_name="Dummy 1",
+                         efficacy_specification=(
+                             self.goal1_spec.serialize_indicators_specs()))
         ]
         m_s_list.return_value = [
-            objects.Strategy(self.ctx, id=1, name="STRATEGY_1",
-                             goal_id=1, display_name="original")
+            objects.Strategy(self.ctx, id=1, name="strategy_1",
+                             goal_id=1, display_name="original",
+                             parameters_spec='{}')
         ]
         self.syncer.sync()
 
@@ -208,29 +239,35 @@ class TestSyncer(base.DbTestCase):
         # that were saved in DB
 
         # Should stay unmodified after sync()
-        goal1 = objects.Goal(self.ctx, id=1, uuid=utils.generate_uuid(),
-                             name="DUMMY_1", display_name="Dummy 1")
+        goal1 = objects.Goal(
+            self.ctx, id=1, uuid=utils.generate_uuid(),
+            name="dummy_1", display_name="Dummy 1",
+            efficacy_specification=(
+                self.goal1_spec.serialize_indicators_specs()))
         # Should be modified by the sync()
-        goal2 = objects.Goal(self.ctx, id=2, uuid=utils.generate_uuid(),
-                             name="DUMMY_2", display_name="Original")
+        goal2 = objects.Goal(
+            self.ctx, id=2, uuid=utils.generate_uuid(),
+            name="dummy_2", display_name="Original",
+            efficacy_specification=self.goal2_spec.serialize_indicators_specs()
+        )
         goal1.create()
         goal2.create()
 
         # Should stay unmodified after sync()
         strategy1 = objects.Strategy(
-            self.ctx, id=1, name="STRATEGY_1", uuid=utils.generate_uuid(),
+            self.ctx, id=1, name="strategy_1", uuid=utils.generate_uuid(),
             display_name="Strategy 1", goal_id=goal1.id)
         # Should stay unmodified after sync()
         strategy2 = objects.Strategy(
-            self.ctx, id=2, name="STRATEGY_2", uuid=utils.generate_uuid(),
+            self.ctx, id=2, name="strategy_2", uuid=utils.generate_uuid(),
             display_name="Strategy 2", goal_id=goal2.id)
         # Should be modified by the sync()
         strategy3 = objects.Strategy(
-            self.ctx, id=3, name="STRATEGY_3", uuid=utils.generate_uuid(),
+            self.ctx, id=3, name="strategy_3", uuid=utils.generate_uuid(),
             display_name="Original", goal_id=goal2.id)
         # Should be modified by the sync()
         strategy4 = objects.Strategy(
-            self.ctx, id=4, name="STRATEGY_4", uuid=utils.generate_uuid(),
+            self.ctx, id=4, name="strategy_4", uuid=utils.generate_uuid(),
             display_name="Original", goal_id=goal2.id)
         strategy1.create()
         strategy2.create()
@@ -288,10 +325,10 @@ class TestSyncer(base.DbTestCase):
         self.assertEqual(4, len(after_strategies))
         self.assertEqual(4, len(after_audit_templates))
         self.assertEqual(
-            {"DUMMY_1", "DUMMY_2"},
+            {"dummy_1", "dummy_2"},
             set([g.name for g in after_goals]))
         self.assertEqual(
-            {"STRATEGY_1", "STRATEGY_2", "STRATEGY_3", "STRATEGY_4"},
+            {"strategy_1", "strategy_2", "strategy_3", "strategy_4"},
             set([s.name for s in after_strategies]))
         created_goals = {
             ag.name: ag for ag in after_goals
@@ -301,6 +338,16 @@ class TestSyncer(base.DbTestCase):
             a_s.name: a_s for a_s in after_strategies
             if a_s.uuid not in [b_s.uuid for b_s in before_strategies]
         }
+
+        dummy_1_spec = [
+            {'description': 'Dummy indicator', 'name': 'dummy',
+             'schema': 'Range(min=0, max=100, min_included=True, '
+                       'max_included=True, msg=None)',
+             'unit': '%'}]
+        dummy_2_spec = []
+        self.assertEqual(
+            [dummy_1_spec, dummy_2_spec],
+            [g.efficacy_specification for g in after_goals])
 
         self.assertEqual(1, len(created_goals))
         self.assertEqual(3, len(created_strategies))
@@ -341,33 +388,41 @@ class TestSyncer(base.DbTestCase):
     def test_end2end_sync_goals_with_removed_goal_and_strategy(self):
         # ### Setup ### #
 
-        # We Simulate the fact that we removed 2 strategies
-        # as well as the DUMMY_2 goal
+        # We simulate the fact that we removed 2 strategies
         self.m_available_strategies.return_value = {
             fake_strategies.FakeDummy1Strategy1.get_name():
                 fake_strategies.FakeDummy1Strategy1
         }
-
+        # We simulate the fact that we removed the dummy_2 goal
+        self.m_available_goals.return_value = {
+            fake_goals.FakeDummy1.get_name(): fake_goals.FakeDummy1,
+        }
         # Should stay unmodified after sync()
-        goal1 = objects.Goal(self.ctx, id=1, uuid=utils.generate_uuid(),
-                             name="DUMMY_1", display_name="Dummy 1")
+        goal1 = objects.Goal(
+            self.ctx, id=1, uuid=utils.generate_uuid(),
+            name="dummy_1", display_name="Dummy 1",
+            efficacy_specification=self.goal1_spec.serialize_indicators_specs()
+        )
         # To be removed by the sync()
-        goal2 = objects.Goal(self.ctx, id=2, uuid=utils.generate_uuid(),
-                             name="DUMMY_2", display_name="Dummy 2")
+        goal2 = objects.Goal(
+            self.ctx, id=2, uuid=utils.generate_uuid(),
+            name="dummy_2", display_name="Dummy 2",
+            efficacy_specification=self.goal2_spec.serialize_indicators_specs()
+        )
         goal1.create()
         goal2.create()
 
         # Should stay unmodified after sync()
         strategy1 = objects.Strategy(
-            self.ctx, id=1, name="STRATEGY_1", uuid=utils.generate_uuid(),
+            self.ctx, id=1, name="strategy_1", uuid=utils.generate_uuid(),
             display_name="Strategy 1", goal_id=goal1.id)
         # To be removed by the sync()
         strategy2 = objects.Strategy(
-            self.ctx, id=2, name="STRATEGY_2", uuid=utils.generate_uuid(),
+            self.ctx, id=2, name="strategy_2", uuid=utils.generate_uuid(),
             display_name="Strategy 2", goal_id=goal1.id)
         # To be removed by the sync()
         strategy3 = objects.Strategy(
-            self.ctx, id=3, name="STRATEGY_3", uuid=utils.generate_uuid(),
+            self.ctx, id=3, name="strategy_3", uuid=utils.generate_uuid(),
             display_name="Original", goal_id=goal2.id)
         strategy1.create()
         strategy2.create()
@@ -413,10 +468,10 @@ class TestSyncer(base.DbTestCase):
         self.assertEqual(1, len(after_strategies))
         self.assertEqual(2, len(after_audit_templates))
         self.assertEqual(
-            {"DUMMY_1"},
+            {"dummy_1"},
             set([g.name for g in after_goals]))
         self.assertEqual(
-            {"STRATEGY_1"},
+            {"strategy_1"},
             set([s.name for s in after_strategies]))
         created_goals = [ag for ag in after_goals
                          if ag.uuid not in [bg.uuid for bg in before_goals]]

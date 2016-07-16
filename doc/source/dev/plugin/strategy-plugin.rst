@@ -28,8 +28,8 @@ configured so that it would provide you all the metrics you need to be able to
 use your strategy.
 
 
-Create a new plugin
-===================
+Create a new strategy plugin
+============================
 
 In order to create a new strategy, you have to:
 
@@ -53,6 +53,8 @@ Here is an example showing how you can write a plugin called ``NewStrategy``:
 
 .. code-block:: python
 
+    # filepath: thirdparty/new.py
+    # import path: thirdparty.new
     import abc
 
     import six
@@ -88,9 +90,12 @@ Here is an example showing how you can write a plugin called ``NewStrategy``:
 As you can see in the above example, the :py:meth:`~.BaseStrategy.execute`
 method returns a :py:class:`~.BaseSolution` instance as required. This solution
 is what wraps the abstract set of actions the strategy recommends to you. This
-solution is then processed by a :ref:`planner <planner_definition>` to produce
-an action plan which contains the sequenced flow of actions to be
-executed by the :ref:`Watcher Applier <watcher_applier_definition>`.
+solution is then processed by a :ref:`planner <watcher_planner_definition>` to
+produce an action plan which contains the sequenced flow of actions to be
+executed by the :ref:`Watcher Applier <watcher_applier_definition>`. This
+solution also contains the various :ref:`efficacy indicators
+<efficacy_indicator_definition>` alongside its computed :ref:`global efficacy
+<efficacy_definition>`.
 
 Please note that your strategy class will expect to find the same constructor
 signature as BaseStrategy to instantiate you strategy. Therefore, you should
@@ -98,7 +103,7 @@ ensure that your ``__init__`` signature is identical to the
 :py:class:`~.BaseStrategy` one.
 
 
-Create a new goal
+Strategy efficacy
 =================
 
 As stated before, the ``NewStrategy`` class extends a class called
@@ -106,126 +111,76 @@ As stated before, the ``NewStrategy`` class extends a class called
 abstract methods which are defined within the :py:class:`~.BaseStrategy` parent
 class.
 
-Once you are confident in your strategy plugin, the next step is now to
-classify your goal by assigning it a proper goal. To do so, you can either
-reuse existing goals defined in Watcher. As of now, four goal-oriented abstract
-classes are defined in Watcher:
+One thing this :py:class:`~.UnclassifiedStrategy` class defines is that our
+``NewStrategy`` achieves the ``unclassified`` goal. This goal is a peculiar one
+as it does not contain any indicator nor does it calculate a global efficacy.
+This proves itself to be quite useful during the development of a new strategy
+for which the goal has yet to be defined or in case a :ref:`new goal
+<implement_goal_plugin>` has yet to be implemented.
 
-- :py:class:`~.UnclassifiedStrategy` which is the one I mentioned up until now.
-- :py:class:`~.DummyBaseStrategy` which is used by :py:class:`~.DummyStrategy`
-  for testing purposes.
-- :py:class:`~.ServerConsolidationBaseStrategy`
-- :py:class:`~.ThermalOptimizationBaseStrategy`
 
-If none of the above actually correspond to the goal your new strategy
-achieves, you can define a brand new one. To do so, you need to:
+Define Strategy Parameters
+==========================
 
-- Extend the :py:class:`~.BaseStrategy` class to make your new goal-oriented
-  strategy abstract class :
-- Implement its :py:meth:`~.BaseStrategy.get_goal_name` class method to
-  return the **unique** ID of the goal you want to achieve.
-- Implement its :py:meth:`~.BaseStrategy.get_goal_display_name` class method
-  to return the translated display name of the goal you want to achieve.
-  Note: Do not use a variable to return the translated string so it can be
-  automatically collected by the translation tool.
-- Implement its :py:meth:`~.BaseStrategy.get_translatable_goal_display_name`
-  class method to return the goal translation key (actually the english
-  display name). The value return should be the same as the string translated
-  in :py:meth:`~.BaseStrategy.get_goal_display_name`.
+For each new added strategy, you can add parameters spec so that an operator
+can input strategy parameters when creating an audit to control the
+:py:meth:`~.BaseStrategy.execute` behavior of strategy. This is useful to
+define some threshold for your strategy, and tune them at runtime.
 
-Here is an example showing how you can define a new ``NEW_GOAL`` goal and
-modify your ``NewStrategy`` plugin so it now achieves the latter:
+To define parameters, just implements :py:meth:`~.BaseStrategy.get_schema` to
+return parameters spec with `jsonschema
+<http://json-schema.org/>`_ format.
+It is strongly encouraged that provide default value for each parameter, or
+else reference fails if operator specify no parameters.
+
+Here is an example showing how you can define 2 parameters for
+``DummyStrategy``:
 
 .. code-block:: python
 
-    import abc
-
-    import six
-
-    from watcher._i18n import _
-    from watcher.decision_engine.strategy.strategies import base
-
-    @six.add_metaclass(abc.ABCMeta)
-    class NewGoalBaseStrategy(base.BaseStrategy):
+    class DummyStrategy(base.DummyBaseStrategy):
 
         @classmethod
-        def get_goal_name(cls):
-            return "NEW_GOAL"
-
-        @classmethod
-        def get_goal_display_name(cls):
-            return _("New goal")
-
-        @classmethod
-        def get_translatable_goal_display_name(cls):
-            return "New goal"
-
-
-    class NewStrategy(NewGoalBaseStrategy):
-
-        def __init__(self, config, osc=None):
-            super(NewStrategy, self).__init__(config, osc)
-
-        def execute(self, original_model):
-            self.solution.add_action(action_type="nop",
-                                     input_parameters=parameters)
-            # Do some more stuff here ...
-            return self.solution
-
-        @classmethod
-        def get_name(cls):
-            return "new_strategy"
-
-        @classmethod
-        def get_display_name(cls):
-            return _("New strategy")
-
-        @classmethod
-        def get_translatable_display_name(cls):
-            return "New strategy"
+        def get_schema(cls):
+            return {
+                "properties": {
+                    "para1": {
+                        "description": "number parameter example",
+                        "type": "number",
+                        "default": 3.2,
+                        "minimum": 1.0,
+                        "maximum": 10.2,
+                    },
+                    "para2": {
+                        "description": "string parameter example",
+                        "type": "string",
+                        "default": "hello",
+                    },
+                },
+            }
 
 
-Define configuration parameters
-===============================
-
-At this point, you have a fully functional strategy. However, in more complex
-implementation, you may want to define some configuration options so one can
-tune the strategy to its needs. To do so, you can implement the
-:py:meth:`~.Loadable.get_config_opts` class method as followed:
+You can reference parameters in :py:meth:`~.BaseStrategy.execute`:
 
 .. code-block:: python
 
-    from oslo_config import cfg
+    class DummyStrategy(base.DummyBaseStrategy):
 
-    class NewStrategy(NewGoalBaseStrategy):
+        def execute(self):
+            para1 = self.input_parameters.para1
+            para2 = self.input_parameters.para2
 
-        # [...]
-
-        def execute(self, original_model):
-            assert self.config.test_opt == 0
-            # [...]
-
-        def get_config_opts(self):
-            return [
-                cfg.StrOpt('test_opt', help="Demo Option.", default=0),
-                # Some more options ...
-            ]
+            if para1 > 5:
+                ...
 
 
-The configuration options defined within this class method will be included
-within the global ``watcher.conf`` configuration file under a section named by
-convention: ``{namespace}.{plugin_name}``. In our case, the ``watcher.conf``
-configuration would have to be modified as followed:
+Operator can specify parameters with following commands:
 
-.. code-block:: ini
+.. code:: bash
 
-    [watcher_strategies.new_strategy]
-    # Option used for testing.
-    test_opt = test_value
+  $ watcher audit create -a <your_audit_template> -p para1=6.0 -p para2=hi
 
-Then, the configuration options you define within this method will then be
-injected in each instantiated object via the  ``config`` parameter of the
-:py:meth:`~.BaseStrategy.__init__` method.
+Pls. check user-guide for details.
 
 
 Abstract Plugin Class
@@ -249,16 +204,16 @@ strategy must be registered as a named entry point under the
 pbr_, this entry point should be placed in your ``setup.cfg`` file.
 
 The name you give to your entry point has to be unique and should be the same
-as the value returned by the :py:meth:`~.BaseStrategy.get_id` class method of
+as the value returned by the :py:meth:`~.BaseStrategy.get_name` class method of
 your strategy.
 
-Here below is how you would proceed to register ``DummyStrategy`` using pbr_:
+Here below is how you would proceed to register ``NewStrategy`` using pbr_:
 
 .. code-block:: ini
 
     [entry_points]
     watcher_strategies =
-        dummy_strategy = thirdparty.dummy:DummyStrategy
+        new_strategy = thirdparty.new:NewStrategy
 
 
 To get a better understanding on how to implement a more advanced strategy,

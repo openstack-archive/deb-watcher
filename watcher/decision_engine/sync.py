@@ -20,14 +20,19 @@ from oslo_log import log
 
 from watcher._i18n import _LE, _LI
 from watcher.common import context
-from watcher.decision_engine.strategy.loading import default
+from watcher.decision_engine.loading import default
 from watcher import objects
 
 LOG = log.getLogger(__name__)
 
-GoalMapping = collections.namedtuple('GoalMapping', ['name', 'display_name'])
+GoalMapping = collections.namedtuple(
+    'GoalMapping', ['name', 'display_name', 'efficacy_specification'])
 StrategyMapping = collections.namedtuple(
-    'StrategyMapping', ['name', 'goal_name', 'display_name'])
+    'StrategyMapping',
+    ['name', 'goal_name', 'display_name', 'parameters_spec'])
+
+IndicatorSpec = collections.namedtuple(
+    'IndicatorSpec', ['name', 'description', 'unit', 'schema'])
 
 
 class Syncer(object):
@@ -52,22 +57,29 @@ class Syncer(object):
 
     @property
     def available_goals(self):
+        """Goals loaded from DB"""
         if self._available_goals is None:
             self._available_goals = objects.Goal.list(self.ctx)
         return self._available_goals
 
     @property
     def available_strategies(self):
+        """Strategies loaded from DB"""
         if self._available_strategies is None:
             self._available_strategies = objects.Strategy.list(self.ctx)
         return self._available_strategies
 
     @property
     def available_goals_map(self):
+        """Mapping of goals loaded from DB"""
         if self._available_goals_map is None:
             self._available_goals_map = {
                 GoalMapping(
-                    name=g.name, display_name=g.display_name): g
+                    name=g.name,
+                    display_name=g.display_name,
+                    efficacy_specification=tuple(
+                        IndicatorSpec(**item)
+                        for item in g.efficacy_specification)): g
                 for g in self.available_goals
             }
         return self._available_goals_map
@@ -79,7 +91,8 @@ class Syncer(object):
             self._available_strategies_map = {
                 StrategyMapping(
                     name=s.name, goal_name=goals_map[s.goal_id],
-                    display_name=s.display_name): s
+                    display_name=s.display_name,
+                    parameters_spec=str(s.parameters_spec)): s
                 for s in self.available_strategies
             }
         return self._available_strategies_map
@@ -109,9 +122,7 @@ class Syncer(object):
 
     def _sync_goal(self, goal_map):
         goal_name = goal_map.name
-        goal_display_name = goal_map.display_name
         goal_mapping = dict()
-
         # Goals that are matching by name with the given discovered goal name
         matching_goals = [g for g in self.available_goals
                           if g.name == goal_name]
@@ -120,7 +131,10 @@ class Syncer(object):
         if stale_goals or not matching_goals:
             goal = objects.Goal(self.ctx)
             goal.name = goal_name
-            goal.display_name = goal_display_name
+            goal.display_name = goal_map.display_name
+            goal.efficacy_specification = [
+                indicator._asdict()
+                for indicator in goal_map.efficacy_specification]
             goal.create()
             LOG.info(_LI("Goal %s created"), goal_name)
 
@@ -136,6 +150,7 @@ class Syncer(object):
         strategy_name = strategy_map.name
         strategy_display_name = strategy_map.display_name
         goal_name = strategy_map.goal_name
+        parameters_spec = strategy_map.parameters_spec
         strategy_mapping = dict()
 
         # Strategies that are matching by name with the given
@@ -150,6 +165,7 @@ class Syncer(object):
             strategy.name = strategy_name
             strategy.display_name = strategy_display_name
             strategy.goal_id = objects.Goal.get_by_name(self.ctx, goal_name).id
+            strategy.parameters_spec = parameters_spec
             strategy.create()
             LOG.info(_LI("Strategy %s created"), strategy_name)
 
@@ -253,29 +269,48 @@ class Syncer(object):
         strategies_map = {}
         goals_map = {}
         discovered_map = {"goals": goals_map, "strategies": strategies_map}
+        goal_loader = default.DefaultGoalLoader()
+        implemented_goals = goal_loader.list_available()
+
         strategy_loader = default.DefaultStrategyLoader()
         implemented_strategies = strategy_loader.list_available()
 
-        for _, strategy_cls in implemented_strategies.items():
-            goals_map[strategy_cls.get_goal_name()] = GoalMapping(
-                name=strategy_cls.get_goal_name(),
-                display_name=strategy_cls.get_translatable_goal_display_name())
+        for _, goal_cls in implemented_goals.items():
+            goals_map[goal_cls.get_name()] = GoalMapping(
+                name=goal_cls.get_name(),
+                display_name=goal_cls.get_translatable_display_name(),
+                efficacy_specification=tuple(
+                    IndicatorSpec(**indicator.to_dict())
+                    for indicator in goal_cls.get_efficacy_specification(
+                    ).get_indicators_specifications()))
 
+        for _, strategy_cls in implemented_strategies.items():
             strategies_map[strategy_cls.get_name()] = StrategyMapping(
                 name=strategy_cls.get_name(),
                 goal_name=strategy_cls.get_goal_name(),
-                display_name=strategy_cls.get_translatable_display_name())
+                display_name=strategy_cls.get_translatable_display_name(),
+                parameters_spec=str(strategy_cls.get_schema()))
 
         return discovered_map
 
     def _soft_delete_stale_goals(self, goal_map, matching_goals):
-        goal_name = goal_map.name
+        """Soft delete the stale goals
+
+        :param goal_map: discovered goal map
+        :type goal_map: :py:class:`~.GoalMapping` instance
+        :param matching_goals: list of DB goals matching the goal_map
+        :type matching_goals: list of :py:class:`~.objects.Goal` instances
+        :returns: A list of soft deleted DB goals (subset of matching goals)
+        :rtype: list of :py:class:`~.objects.Goal` instances
+        """
         goal_display_name = goal_map.display_name
+        goal_name = goal_map.name
+        goal_efficacy_spec = goal_map.efficacy_specification
 
         stale_goals = []
         for matching_goal in matching_goals:
-            if (matching_goal.display_name == goal_display_name and
-                    matching_goal.strategy_id not in self.strategy_mapping):
+            if (matching_goal.efficacy_specification == goal_efficacy_spec and
+                    matching_goal.display_name == goal_display_name):
                 LOG.info(_LI("Goal %s unchanged"), goal_name)
             else:
                 LOG.info(_LI("Goal %s modified"), goal_name)

@@ -39,11 +39,13 @@ which are dynamically loaded by Watcher at launch time.
 import abc
 import six
 
-from watcher._i18n import _
 from watcher.common import clients
 from watcher.common.loader import loadable
+from watcher.common import utils
+from watcher.decision_engine.loading import default as loading
 from watcher.decision_engine.solution import default
 from watcher.decision_engine.strategy.common import level
+from watcher.metrics_engine.cluster_model_collector import manager
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -55,16 +57,27 @@ class BaseStrategy(loadable.Loadable):
     """
 
     def __init__(self, config, osc=None):
-        """:param osc: an OpenStackClients instance"""
+        """Constructor: the signature should be identical within the subclasses
+
+        :param config: Configuration related to this plugin
+        :type config: :py:class:`~.Struct`
+        :param osc: An OpenStackClients instance
+        :type osc: :py:class:`~.OpenStackClients` instance
+        """
         super(BaseStrategy, self).__init__(config)
         self._name = self.get_name()
         self._display_name = self.get_display_name()
+        self._goal = self.get_goal()
         # default strategy level
         self._strategy_level = level.StrategyLevel.conservative
         self._cluster_state_collector = None
         # the solution given by the strategy
-        self._solution = default.DefaultSolution()
+        self._solution = default.DefaultSolution(goal=self.goal, strategy=self)
         self._osc = osc
+        self._collector_manager = None
+        self._model = None
+        self._goal = None
+        self._input_parameters = utils.Struct()
 
     @classmethod
     @abc.abstractmethod
@@ -89,22 +102,14 @@ class BaseStrategy(loadable.Loadable):
     @classmethod
     @abc.abstractmethod
     def get_goal_name(cls):
-        """The goal name for the strategy"""
+        """The goal name the strategy achieves"""
         raise NotImplementedError()
 
     @classmethod
-    @abc.abstractmethod
-    def get_goal_display_name(cls):
-        """The translated display name related to the goal of the strategy"""
-        raise NotImplementedError()
-
-    @classmethod
-    @abc.abstractmethod
-    def get_translatable_goal_display_name(cls):
-        """The translatable msgid related to the goal of the strategy"""
-        # Note(v-francoise): Defined here to be used as the translation key for
-        # other services
-        raise NotImplementedError()
+    def get_goal(cls):
+        """The goal the strategy achieves"""
+        goal_loader = loading.DefaultGoalLoader()
+        return goal_loader.load(cls.get_goal_name())
 
     @classmethod
     def get_config_opts(cls):
@@ -116,14 +121,79 @@ class BaseStrategy(loadable.Loadable):
         return []
 
     @abc.abstractmethod
-    def execute(self, original_model):
+    def pre_execute(self):
+        """Pre-execution phase
+
+        This can be used to fetch some pre-requisites or data.
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def do_execute(self):
+        """Strategy execution phase
+
+        This phase is where you should put the main logic of your strategy.
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def post_execute(self):
+        """Post-execution phase
+
+        This can be used to compute the global efficacy
+        """
+        raise NotImplementedError()
+
+    def execute(self):
         """Execute a strategy
 
-        :param original_model: The model the strategy is executed on
-        :type model: str
         :return: A computed solution (via a placement algorithm)
-        :rtype: :class:`watcher.decision_engine.solution.base.BaseSolution`
+        :rtype: :py:class:`~.BaseSolution` instance
         """
+        self.pre_execute()
+        self.do_execute()
+        self.post_execute()
+
+        self.solution.compute_global_efficacy()
+
+        return self.solution
+
+    @property
+    def collector(self):
+        if self._collector_manager is None:
+            self._collector_manager = manager.CollectorManager()
+        return self._collector_manager
+
+    @property
+    def model(self):
+        """Cluster data model
+
+        :returns: Cluster data model the strategy is executed on
+        :rtype model: :py:class:`~.ModelRoot` instance
+        """
+        if self._model is None:
+            collector = self.collector.get_cluster_model_collector(
+                osc=self.osc)
+            self._model = collector.get_latest_cluster_data_model()
+
+        return self._model
+
+    @classmethod
+    def get_schema(cls):
+        """Defines a Schema that the input parameters shall comply to
+
+        :return: A jsonschema format (mandatory default setting)
+        :rtype: dict
+        """
+        return {}
+
+    @property
+    def input_parameters(self):
+        return self._input_parameters
+
+    @input_parameters.setter
+    def input_parameters(self, p):
+        self._input_parameters = p
 
     @property
     def osc(self):
@@ -140,12 +210,16 @@ class BaseStrategy(loadable.Loadable):
         self._solution = s
 
     @property
-    def id(self):
+    def name(self):
         return self._name
 
     @property
     def display_name(self):
         return self._display_name
+
+    @property
+    def goal(self):
+        return self._goal
 
     @property
     def strategy_level(self):
@@ -169,15 +243,7 @@ class DummyBaseStrategy(BaseStrategy):
 
     @classmethod
     def get_goal_name(cls):
-        return "DUMMY"
-
-    @classmethod
-    def get_goal_display_name(cls):
-        return _("Dummy goal")
-
-    @classmethod
-    def get_translatable_goal_display_name(cls):
-        return "Dummy goal"
+        return "dummy"
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -192,15 +258,7 @@ class UnclassifiedStrategy(BaseStrategy):
 
     @classmethod
     def get_goal_name(cls):
-        return "UNCLASSIFIED"
-
-    @classmethod
-    def get_goal_display_name(cls):
-        return _("Unclassified")
-
-    @classmethod
-    def get_translatable_goal_display_name(cls):
-        return "Unclassified"
+        return "unclassified"
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -208,15 +266,7 @@ class ServerConsolidationBaseStrategy(BaseStrategy):
 
     @classmethod
     def get_goal_name(cls):
-        return "SERVER_CONSOLIDATION"
-
-    @classmethod
-    def get_goal_display_name(cls):
-        return _("Server consolidation")
-
-    @classmethod
-    def get_translatable_goal_display_name(cls):
-        return "Server consolidation"
+        return "server_consolidation"
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -224,15 +274,7 @@ class ThermalOptimizationBaseStrategy(BaseStrategy):
 
     @classmethod
     def get_goal_name(cls):
-        return "THERMAL_OPTIMIZATION"
-
-    @classmethod
-    def get_goal_display_name(cls):
-        return _("Thermal optimization")
-
-    @classmethod
-    def get_translatable_goal_display_name(cls):
-        return "Thermal optimization"
+        return "thermal_optimization"
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -240,12 +282,4 @@ class WorkloadStabilizationBaseStrategy(BaseStrategy):
 
     @classmethod
     def get_goal_name(cls):
-        return "WORKLOAD_BALANCING"
-
-    @classmethod
-    def get_goal_display_name(cls):
-        return _("Workload balancing")
-
-    @classmethod
-    def get_translatable_goal_display_name(cls):
-        return "Workload balancing"
+        return "workload_balancing"

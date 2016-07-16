@@ -12,14 +12,16 @@
 
 import datetime
 import itertools
+import json
 import mock
-
+import pecan
 
 from oslo_config import cfg
 from wsme import types as wtypes
 
 from watcher.api.controllers.v1 import action_plan as api_action_plan
 from watcher.applier import rpcapi as aapi
+from watcher.common import context
 from watcher.common import utils
 from watcher.db import api as db_api
 from watcher import objects
@@ -31,7 +33,11 @@ from watcher.tests.objects import utils as obj_utils
 
 class TestActionPlanObject(base.TestCase):
 
-    def test_action_plan_init(self):
+    @mock.patch.object(objects.EfficacyIndicator,
+                       'list', mock.Mock(return_value=[]))
+    @mock.patch.object(pecan, 'request')
+    def test_action_plan_init(self, m_request):
+        m_request.context = context.make_context()
         act_plan_dict = api_utils.action_plan_post_data()
         del act_plan_dict['state']
         del act_plan_dict['audit_id']
@@ -47,7 +53,8 @@ class TestListActionPlan(api_base.FunctionalTest):
         self.assertEqual([], response['action_plans'])
 
     def _assert_action_plans_fields(self, action_plan):
-        action_plan_fields = ['state']
+        action_plan_fields = ['uuid', 'audit_uuid', 'state', 'global_efficacy',
+                              'efficacy_indicators']
         for field in action_plan_fields:
             self.assertIn(field, action_plan)
 
@@ -71,10 +78,18 @@ class TestListActionPlan(api_base.FunctionalTest):
         self.assertEqual([], response['action_plans'])
 
     def test_get_one_ok(self):
-        action_plan = obj_utils.create_action_plan_without_audit(self.context)
+        action_plan = obj_utils.create_test_action_plan(self.context)
+        obj_utils.create_test_efficacy_indicator(
+            self.context, action_plan_id=action_plan['id'])
         response = self.get_json('/action_plans/%s' % action_plan['uuid'])
         self.assertEqual(action_plan.uuid, response['uuid'])
         self._assert_action_plans_fields(response)
+        self.assertEqual(
+            [{'description': 'Test indicator',
+              'name': 'test_indicator',
+              'value': 0.0,
+              'unit': '%'}],
+            response['efficacy_indicators'])
 
     def test_get_one_with_first_action(self):
         action_plan = obj_utils.create_test_action_plan(self.context)
@@ -163,7 +178,7 @@ class TestListActionPlan(api_base.FunctionalTest):
 
         for id_ in range(0, 2):
             action_plan = response['action_plans'][id_]
-            self.assertEqual(None, action_plan['audit_uuid'])
+            self.assertIsNone(action_plan['audit_uuid'])
 
         for id_ in range(2, 4):
             action_plan = response['action_plans'][id_]
@@ -561,3 +576,65 @@ class TestPatchStateTransitionOk(api_base.FunctionalTest):
         self.assertEqual(self.new_state, updated_ap['state'])
         self.assertEqual('application/json', response.content_type)
         self.assertEqual(200, response.status_code)
+
+
+class TestActionPlanPolicyEnforcement(api_base.FunctionalTest):
+
+    def _common_policy_check(self, rule, func, *arg, **kwarg):
+        self.policy.set_rules({
+            "admin_api": "(role:admin or role:administrator)",
+            "default": "rule:admin_api",
+            rule: "rule:defaut"})
+        response = func(*arg, **kwarg)
+        self.assertEqual(403, response.status_int)
+        self.assertEqual('application/json', response.content_type)
+        self.assertTrue(
+            "Policy doesn't allow %s to be performed." % rule,
+            json.loads(response.json['error_message'])['faultstring'])
+
+    def test_policy_disallow_get_all(self):
+        self._common_policy_check(
+            "action_plan:get_all", self.get_json, '/action_plans',
+            expect_errors=True)
+
+    def test_policy_disallow_get_one(self):
+        action_plan = obj_utils.create_test_action_plan(self.context)
+        self._common_policy_check(
+            "action_plan:get", self.get_json,
+            '/action_plans/%s' % action_plan.uuid,
+            expect_errors=True)
+
+    def test_policy_disallow_detail(self):
+        self._common_policy_check(
+            "action_plan:detail", self.get_json,
+            '/action_plans/detail',
+            expect_errors=True)
+
+    def test_policy_disallow_update(self):
+        action_plan = obj_utils.create_test_action_plan(self.context)
+        self._common_policy_check(
+            "action_plan:update", self.patch_json,
+            '/action_plans/%s' % action_plan.uuid,
+            [{'path': '/state', 'value': 'DELETED', 'op': 'replace'}],
+            expect_errors=True)
+
+    def test_policy_disallow_delete(self):
+        action_plan = obj_utils.create_test_action_plan(self.context)
+        self._common_policy_check(
+            "action_plan:delete", self.delete,
+            '/action_plans/%s' % action_plan.uuid, expect_errors=True)
+
+
+class TestActionPlanPolicyEnforcementWithAdminContext(TestListActionPlan,
+                                                      api_base.AdminRoleTest):
+
+    def setUp(self):
+        super(TestActionPlanPolicyEnforcementWithAdminContext, self).setUp()
+        self.policy.set_rules({
+            "admin_api": "(role:admin or role:administrator)",
+            "default": "rule:admin_api",
+            "action_plan:delete": "rule:default",
+            "action_plan:detail": "rule:default",
+            "action_plan:get": "rule:default",
+            "action_plan:get_all": "rule:default",
+            "action_plan:update": "rule:default"})

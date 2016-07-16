@@ -19,6 +19,7 @@
 from oslo_log import log
 
 from watcher._i18n import _
+from watcher.common import exception
 from watcher.decision_engine.strategy.strategies import base
 
 LOG = log.getLogger(__name__)
@@ -48,17 +49,15 @@ class DummyStrategy(base.DummyBaseStrategy):
     NOP = "nop"
     SLEEP = "sleep"
 
-    def __init__(self, config=None, osc=None):
-        """Dummy Strategy implemented for demo and testing purposes
+    def pre_execute(self):
+        if self.model is None:
+            raise exception.ClusterStateNotDefined()
 
-        :param config: A mapping containing the configuration of this strategy
-        :type config: dict
-        :param osc: :py:class:`~.OpenStackClients` instance
-        """
-        super(DummyStrategy, self).__init__(config, osc)
-
-    def execute(self, original_model):
-        LOG.debug("Executing Dummy strategy")
+    def do_execute(self):
+        para1 = self.input_parameters.para1
+        para2 = self.input_parameters.para2
+        LOG.debug("Executing Dummy strategy with para1=%(p1)f, para2=%(p2)s",
+                  {'p1': para1, 'p2': para2})
         parameters = {'message': 'hello World'}
         self.solution.add_action(action_type=self.NOP,
                                  input_parameters=parameters)
@@ -69,7 +68,9 @@ class DummyStrategy(base.DummyBaseStrategy):
 
         self.solution.add_action(action_type=self.SLEEP,
                                  input_parameters={'duration': 5.0})
-        return self.solution
+
+    def post_execute(self):
+        pass
 
     @classmethod
     def get_name(cls):
@@ -82,3 +83,23 @@ class DummyStrategy(base.DummyBaseStrategy):
     @classmethod
     def get_translatable_display_name(cls):
         return "Dummy strategy"
+
+    @classmethod
+    def get_schema(cls):
+        # Mandatory default setting for each element
+        return {
+            "properties": {
+                "para1": {
+                    "description": "number parameter example",
+                    "type": "number",
+                    "default": 3.2,
+                    "minimum": 1.0,
+                    "maximum": 10.2,
+                },
+                "para2": {
+                    "description": "string parameter example",
+                    "type": "string",
+                    "default": "hello"
+                },
+            },
+        }

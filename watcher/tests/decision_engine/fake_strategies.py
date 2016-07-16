@@ -23,10 +23,9 @@ CONF = cfg.CONF
 
 class FakeStrategy(base_strategy.BaseStrategy):
 
-    GOAL_NAME = NotImplemented
-    GOAL_DISPLAY_NAME = NotImplemented
     NAME = NotImplemented
     DISPLAY_NAME = NotImplemented
+    GOAL_NAME = NotImplemented
 
     @classmethod
     def get_name(cls):
@@ -45,25 +44,22 @@ class FakeStrategy(base_strategy.BaseStrategy):
         return cls.GOAL_NAME
 
     @classmethod
-    def get_goal_display_name(cls):
-        return cls.GOAL_DISPLAY_NAME
-
-    @classmethod
-    def get_translatable_goal_display_name(cls):
-        return cls.GOAL_DISPLAY_NAME
-
-    @classmethod
     def get_config_opts(cls):
         return []
 
-    def execute(self, original_model):
+    def pre_execute(self):
+        pass
+
+    def do_execute(self):
+        pass
+
+    def post_execute(self):
         pass
 
 
 class FakeDummy1Strategy1(FakeStrategy):
-    GOAL_NAME = "DUMMY_1"
-    GOAL_DISPLAY_NAME = "Dummy 1"
-    NAME = "STRATEGY_1"
+    GOAL_NAME = "dummy_1"
+    NAME = "strategy_1"
     DISPLAY_NAME = "Strategy 1"
 
     @classmethod
@@ -74,21 +70,18 @@ class FakeDummy1Strategy1(FakeStrategy):
 
 
 class FakeDummy1Strategy2(FakeStrategy):
-    GOAL_NAME = "DUMMY_1"
-    GOAL_DISPLAY_NAME = "Dummy 1"
-    NAME = "STRATEGY_2"
+    GOAL_NAME = "dummy_1"
+    NAME = "strategy_2"
     DISPLAY_NAME = "Strategy 2"
 
 
 class FakeDummy2Strategy3(FakeStrategy):
-    GOAL_NAME = "DUMMY_2"
-    GOAL_DISPLAY_NAME = "Dummy 2"
-    NAME = "STRATEGY_3"
+    GOAL_NAME = "dummy_2"
+    NAME = "strategy_3"
     DISPLAY_NAME = "Strategy 3"
 
 
 class FakeDummy2Strategy4(FakeStrategy):
-    GOAL_NAME = "DUMMY_2"
-    GOAL_DISPLAY_NAME = "Other Dummy 2"
-    NAME = "STRATEGY_4"
+    GOAL_NAME = "dummy_2"
+    NAME = "strategy_4"
     DISPLAY_NAME = "Strategy 4"

@@ -81,10 +81,12 @@ class Audit(base.WatcherObject):
     fields = {
         'id': int,
         'uuid': obj_utils.str_or_none,
-        'type': obj_utils.str_or_none,
+        'audit_type': obj_utils.str_or_none,
         'state': obj_utils.str_or_none,
         'deadline': obj_utils.datetime_or_str_or_none,
         'audit_template_id': obj_utils.int_or_none,
+        'parameters': obj_utils.dict_or_none,
+        'interval': obj_utils.int_or_none,
     }
 
     @staticmethod

@@ -150,12 +150,14 @@ This database stores all the Watcher domain objects which can be requested
 by the :ref:`Watcher API <archi_watcher_api_definition>` or the
 :ref:`Watcher CLI <archi_watcher_cli_definition>`:
 
+-  :ref:`Goals <goal_definition>`
+-  :ref:`Strategies <strategy_definition>`
 -  :ref:`Audit templates <audit_template_definition>`
 -  :ref:`Audits <audit_definition>`
 -  :ref:`Action plans <action_plan_definition>`
+-  :ref:`Efficacy indicators <efficacy_indicator_definition>` via the Action
+   Plan API.
 -  :ref:`Actions <action_definition>`
--  :ref:`Goals <goal_definition>`
--  :ref:`Strategies <strategy_definition>`
 
 The Watcher domain being here "*optimization of some resources provided by an
 OpenStack system*".
@@ -210,10 +212,10 @@ view (Goals, Audits, Action Plans, ...):
 .. image:: ./images/functional_data_model.svg
    :width: 100%
 
-Here below is a class diagram representing the main objects in Watcher from a
+Here below is a diagram representing the main objects in Watcher from a
 database perspective:
 
-.. image:: ./images/watcher_class_diagram.png
+.. image:: ./images/watcher_db_schema_diagram.png
    :width: 100%
 
 
@@ -259,6 +261,13 @@ previously created :ref:`Audit template <audit_template_definition>`:
 .. image:: ./images/sequence_create_and_launch_audit.png
    :width: 100%
 
+The :ref:`Administrator <administrator_definition>` also can specify type of
+Audit and interval (in case of CONTINUOUS type). There is two types of Audit:
+ONESHOT and CONTINUOUS. Oneshot Audit is launched once and if it succeeded
+executed new action plan list will be provided. Continuous Audit creates
+action plans with specified interval (in seconds); if action plan
+has been created, all previous action plans get CANCELLED state.
+
 A message is sent on the :ref:`AMQP bus <amqp_bus_definition>` which triggers
 the Audit in the
 :ref:`Watcher Decision Engine <watcher_decision_engine_definition>`:
@@ -297,9 +306,11 @@ This method finds an appropriate scheduling of
 :ref:`Actions <action_definition>` taking into account some scheduling rules
 (such as priorities between actions).
 It generates a new :ref:`Action Plan <action_plan_definition>` with status
-**RECOMMENDED** and saves it into the
-:ref:`Watcher Database <watcher_database_definition>`. The saved action plan is
-now a scheduled flow of actions.
+**RECOMMENDED** and saves it into the:ref:`Watcher Database
+<watcher_database_definition>`. The saved action plan is now a scheduled flow
+of actions to which a global efficacy is associated alongside a number of
+:ref:`Efficacy Indicators <efficacy_indicator_definition>` as specified by the
+related :ref:`goal <goal_definition>`.
 
 If every step executed successfully, the
 :ref:`Watcher Decision Engine <watcher_decision_engine_definition>` updates
@@ -308,6 +319,11 @@ the current status of the Audit to **SUCCEEDED** in the
 on the bus to inform other components that the :ref:`Audit <audit_definition>`
 was successful.
 
+This internal workflow the Decision Engine follows to conduct an audit can be
+seen in the sequence diagram here below:
+
+.. image:: ./images/sequence_from_audit_execution_to_actionplan_creation.png
+   :width: 100%
 
 .. _sequence_diagrams_launch_action_plan:
 

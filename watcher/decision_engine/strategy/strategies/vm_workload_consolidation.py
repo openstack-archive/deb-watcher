@@ -50,7 +50,7 @@ class VMWorkloadConsolidation(base.ServerConsolidationBaseStrategy):
     * Offload phase - handling over-utilized resources
     * Consolidation phase - handling under-utilized resources
     * Solution optimization - reducing number of migrations
-    * Deactivation of unused hypervisors
+    * Disability of unused hypervisors
 
     A capacity coefficients (cc) might be used to adjust optimization
     thresholds. Different resources may require different coefficient
@@ -84,7 +84,7 @@ class VMWorkloadConsolidation(base.ServerConsolidationBaseStrategy):
     https://github.com/openstack/watcher-specs/blob/master/specs/mitaka/implemented/zhaw-load-consolidation.rst
     """  # noqa
 
-    def __init__(self, config=None, osc=None):
+    def __init__(self, config, osc=None):
         super(VMWorkloadConsolidation, self).__init__(config, osc)
         self._ceilometer = None
         self.number_of_migrations = 0
@@ -121,8 +121,8 @@ class VMWorkloadConsolidation(base.ServerConsolidationBaseStrategy):
         """
         if isinstance(state, six.string_types):
             return state
-        elif (type(state) == hyper_state.HypervisorState or
-              type(state) == vm_state.VMState):
+        elif isinstance(state, (vm_state.VMState,
+                                hyper_state.HypervisorState)):
             return state.value
         else:
             LOG.error(_LE('Unexpexted resource state type, '
@@ -131,26 +131,26 @@ class VMWorkloadConsolidation(base.ServerConsolidationBaseStrategy):
                       st=type(state))
             raise exception.WatcherException
 
-    def add_action_activate_hypervisor(self, hypervisor):
-        """Add an action for hypervisor activation into the solution.
+    def add_action_enable_hypervisor(self, hypervisor):
+        """Add an action for hypervisor enabler into the solution.
 
         :param hypervisor: hypervisor object
         :return: None
         """
-        params = {'state': hyper_state.HypervisorState.ONLINE.value}
+        params = {'state': hyper_state.HypervisorState.ENABLED.value}
         self.solution.add_action(
             action_type='change_nova_service_state',
             resource_id=hypervisor.uuid,
             input_parameters=params)
         self.number_of_released_hypervisors -= 1
 
-    def add_action_deactivate_hypervisor(self, hypervisor):
-        """Add an action for hypervisor deactivation into the solution.
+    def add_action_disable_hypervisor(self, hypervisor):
+        """Add an action for hypervisor disablity into the solution.
 
         :param hypervisor: hypervisor object
         :return: None
         """
-        params = {'state': hyper_state.HypervisorState.OFFLINE.value}
+        params = {'state': hyper_state.HypervisorState.DISABLED.value}
         self.solution.add_action(
             action_type='change_nova_service_state',
             resource_id=hypervisor.uuid,
@@ -171,12 +171,10 @@ class VMWorkloadConsolidation(base.ServerConsolidationBaseStrategy):
 
         vm_state_str = self.get_state_str(vm.state)
         if vm_state_str != vm_state.VMState.ACTIVE.value:
-            '''
-            Watcher curently only supports live VM migration and block live
-            VM migration which both requires migrated VM to be active.
-            When supported, the cold migration may be used as a fallback
-            migration mechanism to move non active VMs.
-            '''
+            # Watcher curently only supports live VM migration and block live
+            # VM migration which both requires migrated VM to be active.
+            # When supported, the cold migration may be used as a fallback
+            # migration mechanism to move non active VMs.
             LOG.error(_LE('Cannot live migrate: vm_uuid=%(vm_uuid)s, '
                           'state=%(vm_state)s.'),
                       vm_uuid=vm_uuid,
@@ -186,8 +184,8 @@ class VMWorkloadConsolidation(base.ServerConsolidationBaseStrategy):
         migration_type = 'live'
 
         dst_hyper_state_str = self.get_state_str(dst_hypervisor.state)
-        if dst_hyper_state_str == hyper_state.HypervisorState.OFFLINE.value:
-            self.add_action_activate_hypervisor(dst_hypervisor)
+        if dst_hyper_state_str == hyper_state.HypervisorState.DISABLED.value:
+            self.add_action_enable_hypervisor(dst_hypervisor)
         model.get_mapping().unmap(src_hypervisor, vm)
         model.get_mapping().map(dst_hypervisor, vm)
 
@@ -199,23 +197,25 @@ class VMWorkloadConsolidation(base.ServerConsolidationBaseStrategy):
                                  input_parameters=params)
         self.number_of_migrations += 1
 
-    def deactivate_unused_hypervisors(self, model):
-        """Generate actions for deactivation of unused hypervisors.
+    def disable_unused_hypervisors(self, model):
+        """Generate actions for disablity of unused hypervisors.
 
         :param model: model_root object
         :return: None
         """
         for hypervisor in model.get_all_hypervisors().values():
-            if len(model.get_mapping().get_node_vms(hypervisor)) == 0:
-                self.add_action_deactivate_hypervisor(hypervisor)
+            if (len(model.get_mapping().get_node_vms(hypervisor)) == 0 and
+                    hypervisor.status !=
+                    hyper_state.HypervisorState.DISABLED.value):
+                self.add_action_disable_hypervisor(hypervisor)
 
-    def get_prediction_model(self, model):
+    def get_prediction_model(self):
         """Return a deepcopy of a model representing current cluster state.
 
         :param model: model_root object
         :return: model_root object
         """
-        return deepcopy(model)
+        return deepcopy(self.model)
 
     def get_vm_utilization(self, vm_uuid, model, period=3600, aggr='avg'):
         """Collect cpu, ram and disk utilization statistics of a VM.
@@ -339,7 +339,7 @@ class VMWorkloadConsolidation(base.ServerConsolidationBaseStrategy):
         counters = {}
         for hypervisor in hypervisors:
             hyper_state_str = self.get_state_str(hypervisor.state)
-            if hyper_state_str == hyper_state.HypervisorState.ONLINE.value:
+            if hyper_state_str == hyper_state.HypervisorState.ENABLED.value:
                 rhu = self.get_relative_hypervisor_utilization(
                     hypervisor, model)
                 for k in rhu.keys():
@@ -437,12 +437,12 @@ class VMWorkloadConsolidation(base.ServerConsolidationBaseStrategy):
         the least CPU utilized VM first as live migration these
         generaly causes less troubles. This phase results in a cluster
         with no overloaded hypervisors.
-        * This phase is be able to activate turned off hypervisors (if needed
+        * This phase is be able to enable disabled hypervisors (if needed
         and any available) in the case of the resource capacity provided by
         active hypervisors is not able to accomodate all the load.
         As the offload phase is later followed by the consolidation phase,
-        the hypervisor activation in this phase doesn't necessarily results
-        in more activated hypervisors in the final solution.
+        the hypervisor enabler in this phase doesn't necessarily results
+        in more enabled hypervisors in the final solution.
 
         :param model: model_root object
         :param cc: dictionary containing resource capacity coefficients
@@ -452,9 +452,11 @@ class VMWorkloadConsolidation(base.ServerConsolidationBaseStrategy):
             key=lambda x: self.get_hypervisor_utilization(x, model)['cpu'])
         for hypervisor in reversed(sorted_hypervisors):
             if self.is_overloaded(hypervisor, model, cc):
-                for vm in sorted(model.get_mapping().get_node_vms(hypervisor),
-                                 key=lambda x: self.get_vm_utilization(
-                        x, model)['cpu']):
+                for vm in sorted(
+                        model.get_mapping().get_node_vms(hypervisor),
+                        key=lambda x: self.get_vm_utilization(
+                            x, model)['cpu']
+                ):
                     for dst_hypervisor in reversed(sorted_hypervisors):
                         if self.vm_fits(vm, dst_hypervisor, model, cc):
                             self.add_migration(vm, hypervisor,
@@ -498,7 +500,11 @@ class VMWorkloadConsolidation(base.ServerConsolidationBaseStrategy):
                     dsc -= 1
             asc += 1
 
-    def execute(self, original_model):
+    def pre_execute(self):
+        if self.model is None:
+            raise exception.ClusterStateNotDefined()
+
+    def do_execute(self):
         """Execute strategy.
 
         This strategy produces a solution resulting in more
@@ -508,12 +514,12 @@ class VMWorkloadConsolidation(base.ServerConsolidationBaseStrategy):
         * Offload phase - handling over-utilized resources
         * Consolidation phase - handling under-utilized resources
         * Solution optimization - reducing number of migrations
-        * Deactivation of unused hypervisors
+        * Disability of unused hypervisors
 
         :param original_model: root_model object
         """
         LOG.info(_LI('Executing Smart Strategy'))
-        model = self.get_prediction_model(original_model)
+        model = self.get_prediction_model()
         rcu = self.get_relative_cluster_utilization(model)
         self.ceilometer_vm_data_cache = dict()
 
@@ -528,8 +534,8 @@ class VMWorkloadConsolidation(base.ServerConsolidationBaseStrategy):
         # Optimize solution
         self.optimize_solution(model)
 
-        # Deactivate unused hypervisors
-        self.deactivate_unused_hypervisors(model)
+        # disable unused hypervisors
+        self.disable_unused_hypervisors(model)
 
         rcu_after = self.get_relative_cluster_utilization(model)
         info = {
@@ -542,7 +548,9 @@ class VMWorkloadConsolidation(base.ServerConsolidationBaseStrategy):
 
         LOG.debug(info)
 
-        self.solution.model = model
-        self.solution.efficacy = rcu_after['cpu']
-
-        return self.solution
+    def post_execute(self):
+        # self.solution.efficacy = rcu_after['cpu']
+        self.solution.set_efficacy_indicators(
+            released_compute_nodes_count=self.number_of_migrations,
+            vm_migrations_count=self.number_of_released_hypervisors,
+        )

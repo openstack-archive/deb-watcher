@@ -123,6 +123,10 @@ class NotAuthorized(WatcherException):
     code = 403
 
 
+class PolicyNotAuthorized(NotAuthorized):
+    msg_fmt = _("Policy doesn't allow %(action)s to be performed.")
+
+
 class OperationNotPermitted(NotAuthorized):
     msg_fmt = _("Operation not permitted")
 
@@ -148,6 +152,11 @@ class ResourceNotFound(ObjectNotFound):
 
 class InvalidIdentity(Invalid):
     msg_fmt = _("Expected a uuid or int but received %(identity)s")
+
+
+class InvalidOperator(Invalid):
+    msg_fmt = _("Filter operator is not valid: %(operator)s not "
+                "in %(valid_operators)s")
 
 
 class InvalidGoal(Invalid):
@@ -212,6 +221,14 @@ class AuditAlreadyExists(Conflict):
     msg_fmt = _("An audit with UUID %(uuid)s already exists")
 
 
+class AuditIntervalNotSpecified(Invalid):
+    msg_fmt = _("Interval of audit must be specified for %(audit_type)s.")
+
+
+class AuditIntervalNotAllowed(Invalid):
+    msg_fmt = _("Interval of audit must not be set for %(audit_type)s.")
+
+
 class AuditReferenced(Invalid):
     msg_fmt = _("Audit %(audit)s is referenced by one or multiple action "
                 "plans")
@@ -246,6 +263,14 @@ class ActionReferenced(Invalid):
 class ActionFilterCombinationProhibited(Invalid):
     msg_fmt = _("Filtering actions on both audit and action-plan is "
                 "prohibited")
+
+
+class EfficacyIndicatorNotFound(ResourceNotFound):
+    msg_fmt = _("Efficacy indicator %(efficacy_indicator)s could not be found")
+
+
+class EfficacyIndicatorAlreadyExists(Conflict):
+    msg_fmt = _("An action with UUID %(uuid)s already exists")
 
 
 class HTTPNotFound(ResourceNotFound):
@@ -296,6 +321,16 @@ class ClusterStateNotDefined(WatcherException):
 
 class NoAvailableStrategyForGoal(WatcherException):
     msg_fmt = _("No strategy could be found to achieve the '%(goal)s' goal.")
+
+
+class InvalidIndicatorValue(WatcherException):
+    msg_fmt = _("The indicator '%(name)s' with value '%(value)s' "
+                "and spec type '%(spec_type)s' is invalid.")
+
+
+class GlobalEfficacyComputationError(WatcherException):
+    msg_fmt = _("Could not compute the global efficacy for the '%(goal)s' "
+                "goal using the '%(strategy)s' strategy.")
 
 
 class NoMetricValuesForVM(WatcherException):

@@ -73,6 +73,7 @@ Plugins
   :maxdepth: 1
 
   dev/plugin/base-setup
+  dev/plugin/goal-plugin
   dev/plugin/strategy-plugin
   dev/plugin/action-plugin
   dev/plugin/planner-plugin
@@ -90,6 +91,7 @@ Introduction
 
   deploy/installation
   deploy/user-guide
+  deploy/policy
   deploy/gmr
 
 Watcher Manual Pages

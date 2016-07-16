@@ -17,6 +17,7 @@
 # limitations under the License.
 #
 
+from oslo_config import cfg
 from oslo_log import log
 
 from watcher._i18n import _LW
@@ -30,17 +31,28 @@ LOG = log.getLogger(__name__)
 class DefaultPlanner(base.BasePlanner):
     """Default planner implementation
 
-    This implementation comes with basic rules with a fixed set of action types
-    that are weighted. An action having a lower weight will be scheduled before
-    the other ones.
+    This implementation comes with basic rules with a set of action types that
+    are weighted. An action having a lower weight will be scheduled before the
+    other ones. The set of action types can be specified by 'weights' in the
+    ``watcher.conf``. You need to associate a different weight to all available
+    actions into the configuration file, otherwise you will get an error when
+    the new action will be referenced in the solution produced by a strategy.
     """
 
-    priorities = {
+    weights_dict = {
         'nop': 0,
         'sleep': 1,
         'change_nova_service_state': 2,
         'migrate': 3,
     }
+
+    @classmethod
+    def get_config_opts(cls):
+        return [cfg.DictOpt(
+            'weights',
+            help="These weights are used to schedule the actions",
+            default=cls.weights_dict),
+        ]
 
     def create_action(self,
                       action_plan_id,
@@ -59,18 +71,21 @@ class DefaultPlanner(base.BasePlanner):
 
     def schedule(self, context, audit_id, solution):
         LOG.debug('Create an action plan for the audit uuid: %s ', audit_id)
-        action_plan = self._create_action_plan(context, audit_id)
+        priorities = self.config.weights
+        action_plan = self._create_action_plan(context, audit_id, solution)
 
         actions = list(solution.actions)
         to_schedule = []
         for action in actions:
-            json_action = self.create_action(action_plan_id=action_plan.id,
-                                             action_type=action.get(
-                                                 'action_type'),
-                                             input_parameters=action.get(
-                                                 'input_parameters'))
-            to_schedule.append((self.priorities[action.get('action_type')],
+            json_action = self.create_action(
+                action_plan_id=action_plan.id,
+                action_type=action.get('action_type'),
+                input_parameters=action.get('input_parameters'))
+            to_schedule.append((priorities[action.get('action_type')],
                                 json_action))
+
+        self._create_efficacy_indicators(
+            context, action_plan.id, solution.efficacy_indicators)
 
         # scheduling
         scheduled = sorted(to_schedule, key=lambda x: (x[0]))
@@ -96,18 +111,37 @@ class DefaultPlanner(base.BasePlanner):
 
         return action_plan
 
-    def _create_action_plan(self, context, audit_id):
+    def _create_action_plan(self, context, audit_id, solution):
         action_plan_dict = {
             'uuid': utils.generate_uuid(),
             'audit_id': audit_id,
             'first_action_id': None,
-            'state': objects.action_plan.State.RECOMMENDED
+            'state': objects.action_plan.State.RECOMMENDED,
+            'global_efficacy': solution.global_efficacy,
         }
 
         new_action_plan = objects.ActionPlan(context, **action_plan_dict)
         new_action_plan.create(context)
-        new_action_plan.save()
+
         return new_action_plan
+
+    def _create_efficacy_indicators(self, context, action_plan_id, indicators):
+        efficacy_indicators = []
+        for indicator in indicators:
+            efficacy_indicator_dict = {
+                'uuid': utils.generate_uuid(),
+                'name': indicator.name,
+                'description': indicator.description,
+                'unit': indicator.unit,
+                'value': indicator.value,
+                'action_plan_id': action_plan_id,
+            }
+            new_efficacy_indicator = objects.EfficacyIndicator(
+                context, **efficacy_indicator_dict)
+            new_efficacy_indicator.create(context)
+
+            efficacy_indicators.append(new_efficacy_indicator)
+        return efficacy_indicators
 
     def _create_action(self, context, _action, parent_action):
         try:

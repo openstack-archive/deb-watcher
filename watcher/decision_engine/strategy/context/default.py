@@ -16,9 +16,9 @@
 from oslo_log import log
 
 from watcher.common import clients
+from watcher.common import utils
 from watcher.decision_engine.strategy.context import base
 from watcher.decision_engine.strategy.selection import default
-from watcher.metrics_engine.cluster_model_collector import manager
 
 from watcher import objects
 
@@ -26,15 +26,9 @@ LOG = log.getLogger(__name__)
 
 
 class DefaultStrategyContext(base.BaseStrategyContext):
-
     def __init__(self):
         super(DefaultStrategyContext, self).__init__()
         LOG.debug("Initializing Strategy Context")
-        self._collector_manager = manager.CollectorManager()
-
-    @property
-    def collector(self):
-        return self._collector_manager
 
     def execute_strategy(self, audit_uuid, request_context):
         audit = objects.Audit.get_by_uuid(request_context, audit_uuid)
@@ -46,18 +40,33 @@ class DefaultStrategyContext(base.BaseStrategyContext):
         osc = clients.OpenStackClients()
         # todo(jed) retrieve in audit_template parameters (threshold,...)
         # todo(jed) create ActionPlan
-        collector_manager = self.collector.get_cluster_model_collector(osc=osc)
 
-        # todo(jed) remove call to get_latest_cluster_data_model
-        cluster_data_model = collector_manager.get_latest_cluster_data_model()
+        goal = objects.Goal.get_by_id(request_context, audit_template.goal_id)
+
+        # NOTE(jed56) In the audit_template object, the 'strategy_id' attribute
+        # is optional. If the admin wants to force the trigger of a Strategy
+        # it could specify the Strategy uuid in the Audit Template.
+        strategy_name = None
+        if audit_template.strategy_id:
+            strategy = objects.Strategy.get_by_id(request_context,
+                                                  audit_template.strategy_id)
+            strategy_name = strategy.name
 
         strategy_selector = default.DefaultStrategySelector(
-            goal_name=objects.Goal.get_by_id(
-                request_context, audit_template.goal_id).name,
-            strategy_name=None,
+            goal_name=goal.name,
+            strategy_name=strategy_name,
             osc=osc)
 
         selected_strategy = strategy_selector.select()
 
-        # todo(jed) add parameters and remove cluster_data_model
-        return selected_strategy.execute(cluster_data_model)
+        schema = selected_strategy.get_schema()
+        if not audit.parameters and schema:
+            # Default value feedback if no predefined strategy
+            utils.DefaultValidatingDraft4Validator(schema).validate(
+                audit.parameters)
+
+        selected_strategy.input_parameters.update({
+            name: value for name, value in audit.parameters.items()
+        })
+
+        return selected_strategy.execute()

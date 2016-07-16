@@ -41,6 +41,7 @@ from watcher.api.controllers.v1 import collection
 from watcher.api.controllers.v1 import types
 from watcher.api.controllers.v1 import utils as api_utils
 from watcher.common import exception
+from watcher.common import policy
 from watcher.common import utils as common_utils
 from watcher import objects
 
@@ -54,6 +55,7 @@ class Strategy(base.APIBase):
     between the internal object model and the API representation of a strategy.
     """
     _goal_uuid = None
+    _goal_name = None
 
     def _get_goal(self, value):
         if value == wtypes.Unset:
@@ -81,6 +83,16 @@ class Strategy(base.APIBase):
             if goal:
                 self._goal_uuid = goal.uuid
 
+    def _get_goal_name(self):
+        return self._goal_name
+
+    def _set_goal_name(self, value):
+        if value and self._goal_name != value:
+            self._goal_name = None
+            goal = self._get_goal(value)
+            if goal:
+                self._goal_name = goal.name
+
     uuid = types.uuid
     """Unique UUID for this strategy"""
 
@@ -97,6 +109,13 @@ class Strategy(base.APIBase):
                                 mandatory=True)
     """The UUID of the goal this audit refers to"""
 
+    goal_name = wsme.wsproperty(wtypes.text, _get_goal_name, _set_goal_name,
+                                mandatory=False)
+    """The name of the goal this audit refers to"""
+
+    parameters_spec = {wtypes.text: types.jsontype}
+    """ Parameters spec dict"""
+
     def __init__(self, **kwargs):
         super(Strategy, self).__init__()
 
@@ -105,16 +124,21 @@ class Strategy(base.APIBase):
         self.fields.append('name')
         self.fields.append('display_name')
         self.fields.append('goal_uuid')
+        self.fields.append('goal_name')
+        self.fields.append('parameters_spec')
         setattr(self, 'uuid', kwargs.get('uuid', wtypes.Unset))
         setattr(self, 'name', kwargs.get('name', wtypes.Unset))
         setattr(self, 'display_name', kwargs.get('display_name', wtypes.Unset))
         setattr(self, 'goal_uuid', kwargs.get('goal_id', wtypes.Unset))
+        setattr(self, 'goal_name', kwargs.get('goal_id', wtypes.Unset))
+        setattr(self, 'parameters_spec', kwargs.get('parameters_spec',
+                wtypes.Unset))
 
     @staticmethod
     def _convert_with_links(strategy, url, expand=True):
         if not expand:
             strategy.unset_fields_except(
-                ['uuid', 'name', 'display_name', 'goal_uuid'])
+                ['uuid', 'name', 'display_name', 'goal_uuid', 'goal_name'])
 
         strategy.links = [
             link.Link.make_link('self', url, 'strategies', strategy.uuid),
@@ -223,6 +247,9 @@ class StrategiesController(rest.RestController):
         :param sort_key: column to sort results by. Default: id.
         :param sort_dir: direction to sort. "asc" or "desc". Default: asc.
         """
+        context = pecan.request.context
+        policy.enforce(context, 'strategy:get_all',
+                       action='strategy:get_all')
         filters = {}
         if goal:
             if common_utils.is_uuid_like(goal):
@@ -245,6 +272,9 @@ class StrategiesController(rest.RestController):
         :param sort_key: column to sort results by. Default: id.
         :param sort_dir: direction to sort. "asc" or "desc". Default: asc.
         """
+        context = pecan.request.context
+        policy.enforce(context, 'strategy:detail',
+                       action='strategy:detail')
         # NOTE(lucasagomes): /detail should only work agaist collections
         parent = pecan.request.path.split('/')[:-1][-1]
         if parent != "strategies":
@@ -271,11 +301,9 @@ class StrategiesController(rest.RestController):
         if self.from_strategies:
             raise exception.OperationNotPermitted
 
-        if common_utils.is_uuid_like(strategy):
-            get_strategy_func = objects.Strategy.get_by_uuid
-        else:
-            get_strategy_func = objects.Strategy.get_by_name
-
-        rpc_strategy = get_strategy_func(pecan.request.context, strategy)
+        context = pecan.request.context
+        rpc_strategy = api_utils.get_resource('Strategy', strategy)
+        policy.enforce(context, 'strategy:get', rpc_strategy,
+                       action='strategy:get')
 
         return Strategy.convert_with_links(rpc_strategy)

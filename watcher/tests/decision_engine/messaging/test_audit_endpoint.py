@@ -16,18 +16,16 @@
 
 import mock
 
-from watcher.common import utils
-from watcher.decision_engine.audit.default import DefaultAuditHandler
-from watcher.decision_engine.messaging.audit_endpoint import AuditEndpoint
-from watcher.metrics_engine.cluster_model_collector.manager import \
-    CollectorManager
-from watcher.tests.db.base import DbTestCase
-from watcher.tests.decision_engine.strategy.strategies.faker_cluster_state \
-    import FakerModelCollector
+from watcher.decision_engine.audit import oneshot as oneshot_handler
+from watcher.decision_engine.messaging import audit_endpoint
+from watcher.metrics_engine.cluster_model_collector import manager
+from watcher.tests.db import base
+from watcher.tests.decision_engine.strategy.strategies \
+    import faker_cluster_state
 from watcher.tests.objects import utils as obj_utils
 
 
-class TestAuditEndpoint(DbTestCase):
+class TestAuditEndpoint(base.DbTestCase):
     def setUp(self):
         super(TestAuditEndpoint, self).setUp()
         self.audit_template = obj_utils.create_test_audit_template(
@@ -36,30 +34,32 @@ class TestAuditEndpoint(DbTestCase):
             self.context,
             audit_template_id=self.audit_template.id)
 
-    @mock.patch.object(CollectorManager, "get_cluster_model_collector")
+    @mock.patch.object(manager.CollectorManager, "get_cluster_model_collector")
     def test_do_trigger_audit(self, mock_collector):
-        mock_collector.return_value = FakerModelCollector()
-        audit_uuid = utils.generate_uuid()
+        mock_collector.return_value = faker_cluster_state.FakerModelCollector()
 
-        audit_handler = DefaultAuditHandler(mock.MagicMock())
-        endpoint = AuditEndpoint(audit_handler)
+        audit_handler = oneshot_handler.OneShotAuditHandler(mock.MagicMock())
+        endpoint = audit_endpoint.AuditEndpoint(audit_handler)
 
-        with mock.patch.object(DefaultAuditHandler, 'execute') as mock_call:
+        with mock.patch.object(oneshot_handler.OneShotAuditHandler,
+                               'execute') as mock_call:
             mock_call.return_value = 0
-            endpoint.do_trigger_audit(audit_handler, audit_uuid)
+            endpoint.do_trigger_audit(self.context, self.audit.uuid)
 
-        mock_call.assert_called_once_with(audit_uuid, audit_handler)
+        self.assertEqual(mock_call.call_count, 1)
 
-    @mock.patch.object(CollectorManager, "get_cluster_model_collector")
+    @mock.patch.object(manager.CollectorManager, "get_cluster_model_collector")
     def test_trigger_audit(self, mock_collector):
-        mock_collector.return_value = FakerModelCollector()
-        audit_uuid = utils.generate_uuid()
-        audit_handler = DefaultAuditHandler(mock.MagicMock())
-        endpoint = AuditEndpoint(audit_handler)
+        mock_collector.return_value = faker_cluster_state.FakerModelCollector()
 
-        with mock.patch.object(DefaultAuditHandler, 'execute') \
-                as mock_call:
-            mock_call.return_value = 0
-            endpoint.trigger_audit(audit_handler, audit_uuid)
+        audit_handler = oneshot_handler.OneShotAuditHandler(mock.MagicMock())
+        endpoint = audit_endpoint.AuditEndpoint(audit_handler)
 
-        mock_call.assert_called_once_with(audit_uuid, audit_handler)
+        with mock.patch.object(endpoint.executor, 'submit') as mock_call:
+            mock_execute = mock.call(endpoint.do_trigger_audit,
+                                     self.context,
+                                     self.audit.uuid)
+            endpoint.trigger_audit(self.context, self.audit.uuid)
+
+        mock_call.assert_has_calls([mock_execute])
+        self.assertEqual(mock_call.call_count, 1)
