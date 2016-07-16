@@ -12,7 +12,7 @@ Build-Depends: debhelper (>= 9),
                python-pbr (>= 1.8),
                python-setuptools,
                python-sphinx,
-Build-Depends-Indep: python-apscheduler,
+Build-Depends-Indep: python-apscheduler (>= 3.0.5),
                      python-ceilometerclient (>= 2.2.1),
                      python-cinderclient (>= 1.6.0),
                      python-coverage,
@@ -66,7 +66,7 @@ Homepage: https://github.com/openstack/watcher
 Package: python-watcher
 Section: python
 Architecture: all
-Depends: python-apscheduler,
+Depends: python-apscheduler (>= 3.0.5),
          python-ceilometerclient (>= 2.2.1),
          python-cinderclient (>= 1.6.0),
          python-enum34,

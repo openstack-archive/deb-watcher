@@ -1,3 +1,9 @@
+watcher (0.28.0-2) experimental; urgency=medium
+
+  * Now requires python-apscheduler >= 3.0.5 (FTBFS otherwise).
+
+ -- Thomas Goirand <zigo@debian.org>  Sat, 16 Jul 2016 15:37:25 +0000
+
 watcher (0.28.0-1) experimental; urgency=medium
 
   * New upstream release.
