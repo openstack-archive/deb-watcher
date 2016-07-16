@@ -1,3 +1,9 @@
+watcher (0.28.0-1) experimental; urgency=medium
+
+  * New upstream release.
+
+ -- Thomas Goirand <zigo@debian.org>  Sat, 16 Jul 2016 17:22:03 +0200
+
 watcher (0.27.0-3) experimental; urgency=medium
 
   * Added runtime depends on net-tools for watcher-api, as the config is using
