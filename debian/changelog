@@ -1,6 +1,7 @@
 watcher (0.28.0-1) experimental; urgency=medium
 
   * New upstream release.
+  * Fixed (build-)depends for this release.
 
  -- Thomas Goirand <zigo@debian.org>  Sat, 16 Jul 2016 17:22:03 +0200
 
