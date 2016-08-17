@@ -1,0 +1,9 @@
+Code-Review+2: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Code-Review+1: Daniel Pawlik <daniel.pawlik@corp.ovh.com>
+Workflow+1: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 29 Jul 2016 01:55:50 +0000
+Reviewed-on: https://review.openstack.org/338078
+Project: openstack/deb-watcher
+Branch: refs/heads/master
