@@ -1,0 +1,10 @@
+Code-Review+2: Alexander Chadin <a.chadin@servionica.ru>
+Code-Review+1: Bin Zhou <zhou.bin9@zte.com.cn>
+Code-Review+2: Edwin Zhai <edwin.zhai@intel.com>
+Workflow+1: Edwin Zhai <edwin.zhai@intel.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 06 Sep 2016 07:11:25 +0000
+Reviewed-on: https://review.openstack.org/364629
+Project: openstack/deb-watcher
+Branch: refs/heads/master

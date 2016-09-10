@@ -1,0 +1,8 @@
+Code-Review+2: Edwin Zhai <edwin.zhai@intel.com>
+Workflow+1: Edwin Zhai <edwin.zhai@intel.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 17 Aug 2016 06:28:26 +0000
+Reviewed-on: https://review.openstack.org/355168
+Project: openstack/deb-watcher
+Branch: refs/heads/master

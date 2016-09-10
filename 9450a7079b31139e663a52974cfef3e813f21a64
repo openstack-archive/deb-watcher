@@ -1,0 +1,9 @@
+Code-Review+2: Alexander Chadin <a.chadin@servionica.ru>
+Code-Review+2: David TARDIVEL <David.TARDIVEL@b-com.com>
+Workflow+1: David TARDIVEL <David.TARDIVEL@b-com.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Mon, 22 Aug 2016 07:51:46 +0000
+Reviewed-on: https://review.openstack.org/357295
+Project: openstack/deb-watcher
+Branch: refs/heads/master

@@ -1,0 +1,12 @@
+Code-Review+2: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Code-Review+1: Antoine Cabot <antoine.cabot@b-com.com>
+Code-Review+1: Susanne Balle <sleipnir012@gmail.com>
+Code-Review+1: Daniel Pawlik <daniel.pawlik@corp.ovh.com>
+Code-Review+2: Alexander Chadin <a.chadin@servionica.ru>
+Workflow+1: Alexander Chadin <a.chadin@servionica.ru>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 07 Sep 2016 14:20:32 +0000
+Reviewed-on: https://review.openstack.org/362827
+Project: openstack/deb-watcher
+Branch: refs/heads/master

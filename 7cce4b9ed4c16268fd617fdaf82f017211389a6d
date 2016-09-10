@@ -1,0 +1,11 @@
+Code-Review+1: Susanne Balle <sleipnir012@gmail.com>
+Code-Review+2: Alexander Chadin <a.chadin@servionica.ru>
+Code-Review+1: Joe Cropper <jwcroppe@us.ibm.com>
+Code-Review+1: Jinquan Ni <ni.jinquan@zte.com.cn>
+Workflow+1: David TARDIVEL <David.TARDIVEL@b-com.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 30 Aug 2016 07:36:57 +0000
+Reviewed-on: https://review.openstack.org/362013
+Project: openstack/deb-watcher
+Branch: refs/heads/master

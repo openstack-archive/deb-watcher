@@ -1,0 +1,8 @@
+Code-Review+2: Jean-Emile DARTOIS <jean-emile.dartois@b-com.com>
+Workflow+1: David TARDIVEL <David.TARDIVEL@b-com.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 26 Aug 2016 16:29:33 +0000
+Reviewed-on: https://review.openstack.org/358465
+Project: openstack/deb-watcher
+Branch: refs/heads/master
