@@ -33,8 +33,8 @@ CONF = cfg.CONF
 WATCHER_CONTINUOUS_OPTS = [
     cfg.IntOpt('continuous_audit_interval',
                default=10,
-               help='Interval, in seconds, for checking new created'
-                    'continuous audit.')
+               help='Interval (in seconds) for checking newly created '
+                    'continuous audits.')
 ]
 
 CONF.register_opts(WATCHER_CONTINUOUS_OPTS, 'watcher_decision_engine')
@@ -64,7 +64,7 @@ class ContinuousAuditHandler(base.AuditHandler):
             # if audit isn't in active states, audit's job must be removed to
             # prevent using of inactive audit in future.
             job_to_delete = [job for job in self.jobs
-                             if job.keys()[0] == audit.uuid][0]
+                             if list(job.keys())[0] == audit.uuid][0]
             self.jobs.remove(job_to_delete)
             job_to_delete[audit.uuid].remove()
 
@@ -74,8 +74,8 @@ class ContinuousAuditHandler(base.AuditHandler):
 
     def do_execute(self, audit, request_context):
         # execute the strategy
-        solution = self.strategy_context.execute_strategy(audit.uuid,
-                                                          request_context)
+        solution = self.strategy_context.execute_strategy(
+            audit, request_context)
 
         if audit.audit_type == audit_objects.AuditType.CONTINUOUS.value:
             a_plan_filters = {'audit_uuid': audit.uuid,

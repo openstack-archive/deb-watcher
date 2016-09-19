@@ -26,6 +26,8 @@ import cinderclient.exceptions as ciexceptions
 import novaclient.exceptions as nvexceptions
 
 from watcher.common import clients
+from watcher.common import exception
+from watcher.common import utils
 
 LOG = log.getLogger(__name__)
 
@@ -40,8 +42,26 @@ class NovaHelper(object):
         self.nova = self.osc.nova()
         self.glance = self.osc.glance()
 
-    def get_hypervisors_list(self):
+    def get_compute_node_list(self):
         return self.nova.hypervisors.list()
+
+    def get_compute_node_by_id(self, node_id):
+        """Get compute node by ID (*not* UUID)"""
+        # We need to pass an object with an 'id' attribute to make it work
+        return self.nova.hypervisors.get(utils.Struct(id=node_id))
+
+    def get_compute_node_by_hostname(self, node_hostname):
+        """Get compute node by ID (*not* UUID)"""
+        # We need to pass an object with an 'id' attribute to make it work
+        try:
+            compute_nodes = self.nova.hypervisors.search(node_hostname)
+            if len(compute_nodes) != 1:
+                raise exception.ComputeNodeNotFound(name=node_hostname)
+
+            return self.get_compute_node_by_id(compute_nodes[0].id)
+        except Exception as exc:
+            LOG.exception(exc)
+            raise exception.ComputeNodeNotFound(name=node_hostname)
 
     def find_instance(self, instance_id):
         search_opts = {'all_tenants': True}
@@ -54,7 +74,27 @@ class NovaHelper(object):
                 break
         return instance
 
-    def watcher_non_live_migrate_instance(self, instance_id, hypervisor_id,
+    def wait_for_volume_status(self, volume, status, timeout=60,
+                               poll_interval=1):
+        """Wait until volume reaches given status.
+
+        :param volume: volume resource
+        :param status: expected status of volume
+        :param timeout: timeout in seconds
+        :param poll_interval: poll interval in seconds
+        """
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            volume = self.cinder.volumes.get(volume.id)
+            if volume.status == status:
+                break
+            time.sleep(poll_interval)
+        else:
+            raise Exception("Volume %s did not reach status %s after %d s"
+                            % (volume.id, status, timeout))
+        return volume.status == status
+
+    def watcher_non_live_migrate_instance(self, instance_id, node_id,
                                           keep_original_image_name=True):
         """This method migrates a given instance
 
@@ -73,7 +113,6 @@ class NovaHelper(object):
             used as the name of the intermediate image used for migration.
             If this flag is False, a temporary image name is built
         """
-
         new_image_name = ""
 
         LOG.debug(
@@ -218,7 +257,7 @@ class NovaHelper(object):
             # We create the new instance from
             # the intermediate image of the original instance
             new_instance = self. \
-                create_instance(hypervisor_id,
+                create_instance(node_id,
                                 instance_name,
                                 image_uuid,
                                 flavor_name,
@@ -278,7 +317,6 @@ class NovaHelper(object):
         :param dest_hostname: the name of the destination compute node.
         :param block_migration:  No shared storage is required.
         """
-
         LOG.debug("Trying a live migrate of instance %s to host '%s'" % (
             instance_id, dest_hostname))
 
@@ -319,8 +357,6 @@ class NovaHelper(object):
 
             return True
 
-        return False
-
     def enable_service_nova_compute(self, hostname):
         if self.nova.services.enable(host=hostname,
                                      binary='nova-compute'). \
@@ -358,7 +394,7 @@ class NovaHelper(object):
         # Sets the compute host's ability to accept new instances.
         # host_maintenance_mode(self, host, mode):
         # Start/Stop host maintenance window.
-        # On start, it triggers guest VMs evacuation.
+        # On start, it triggers guest instances evacuation.
         host = self.nova.hosts.get(hostname)
 
         if not host:
@@ -407,6 +443,8 @@ class NovaHelper(object):
                                                             metadata)
 
                 image = self.glance.images.get(image_uuid)
+                if not image:
+                    return None
 
                 # Waiting for the new image to be officially in ACTIVE state
                 # in order to make sure it can be used
@@ -417,6 +455,8 @@ class NovaHelper(object):
                     retry -= 1
                     # Retrieve the instance again so the status field updates
                     image = self.glance.images.get(image_uuid)
+                    if not image:
+                        break
                     status = image.status
                     LOG.debug("Current image status: %s" % status)
 
@@ -434,7 +474,6 @@ class NovaHelper(object):
 
         :param instance_id: the unique id of the instance to delete.
         """
-
         LOG.debug("Trying to remove instance %s ..." % instance_id)
 
         instance = self.find_instance(instance_id)
@@ -452,7 +491,6 @@ class NovaHelper(object):
 
         :param instance_id: the unique id of the instance to stop.
         """
-
         LOG.debug("Trying to stop instance %s ..." % instance_id)
 
         instance = self.find_instance(instance_id)
@@ -463,32 +501,31 @@ class NovaHelper(object):
         else:
             self.nova.servers.stop(instance_id)
 
-            if self.wait_for_vm_state(instance, "stopped", 8, 10):
+            if self.wait_for_instance_state(instance, "stopped", 8, 10):
                 LOG.debug("Instance %s stopped." % instance_id)
                 return True
             else:
                 return False
 
-    def wait_for_vm_state(self, server, vm_state, retry, sleep):
-        """Waits for server to be in a specific vm_state
+    def wait_for_instance_state(self, server, state, retry, sleep):
+        """Waits for server to be in a specific state
 
-        The vm_state can be one of the following :
+        The state can be one of the following :
         active, stopped
 
         :param server: server object.
-        :param vm_state: for which state we are waiting for
+        :param state: for which state we are waiting for
         :param retry: how many times to retry
         :param sleep: seconds to sleep between the retries
         """
-
         if not server:
             return False
 
-        while getattr(server, 'OS-EXT-STS:vm_state') != vm_state and retry:
+        while getattr(server, 'OS-EXT-STS:vm_state') != state and retry:
             time.sleep(sleep)
             server = self.nova.servers.get(server)
             retry -= 1
-        return getattr(server, 'OS-EXT-STS:vm_state') == vm_state
+        return getattr(server, 'OS-EXT-STS:vm_state') == state
 
     def wait_for_instance_status(self, instance, status_list, retry, sleep):
         """Waits for instance to be in a specific status
@@ -502,7 +539,6 @@ class NovaHelper(object):
         :param retry: how many times to retry
         :param sleep: seconds to sleep between the retries
         """
-
         if not instance:
             return False
 
@@ -514,7 +550,7 @@ class NovaHelper(object):
         LOG.debug("Current instance status: %s" % instance.status)
         return instance.status in status_list
 
-    def create_instance(self, hypervisor_id, inst_name="test", image_id=None,
+    def create_instance(self, node_id, inst_name="test", image_id=None,
                         flavor_name="m1.tiny",
                         sec_group_list=["default"],
                         network_names_list=["demo-net"], keypair_name="mykeys",
@@ -526,7 +562,6 @@ class NovaHelper(object):
         it with the new instance
         It returns the unique id of the created instance.
         """
-
         LOG.debug(
             "Trying to create new instance '%s' "
             "from image '%s' with flavor '%s' ..." % (
@@ -570,15 +605,14 @@ class NovaHelper(object):
             net_obj = {"net-id": nic_id}
             net_list.append(net_obj)
 
-        instance = self.nova.servers. \
-            create(inst_name,
-                   image, flavor=flavor,
-                   key_name=keypair_name,
-                   security_groups=sec_group_list,
-                   nics=net_list,
-                   block_device_mapping_v2=block_device_mapping_v2,
-                   availability_zone="nova:" +
-                                     hypervisor_id)
+        instance = self.nova.servers.create(
+            inst_name, image,
+            flavor=flavor,
+            key_name=keypair_name,
+            security_groups=sec_group_list,
+            nics=net_list,
+            block_device_mapping_v2=block_device_mapping_v2,
+            availability_zone="nova:%s" % node_id)
 
         # Poll at 5 second intervals, until the status is no longer 'BUILD'
         if instance:
@@ -609,13 +643,13 @@ class NovaHelper(object):
 
         return network_id
 
-    def get_vms_by_hypervisor(self, host):
-        return [vm for vm in
+    def get_instances_by_node(self, host):
+        return [instance for instance in
                 self.nova.servers.list(search_opts={"all_tenants": True})
-                if self.get_hostname(vm) == host]
+                if self.get_hostname(instance) == host]
 
-    def get_hostname(self, vm):
-        return str(getattr(vm, 'OS-EXT-SRV-ATTR:host'))
+    def get_hostname(self, instance):
+        return str(getattr(instance, 'OS-EXT-SRV-ATTR:host'))
 
     def get_flavor_instance(self, instance, cache):
         fid = instance.flavor['id']

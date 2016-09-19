@@ -20,10 +20,9 @@ from oslo_log import log
 
 from watcher._i18n import _, _LE, _LI, _LW
 from watcher.common import exception as wexc
-from watcher.decision_engine.model import resource
-from watcher.decision_engine.model import vm_state
+from watcher.decision_engine.cluster.history import ceilometer as ceil
+from watcher.decision_engine.model import element
 from watcher.decision_engine.strategy.strategies import base
-from watcher.metrics_engine.cluster_history import ceilometer as ceil
 
 LOG = log.getLogger(__name__)
 
@@ -37,7 +36,7 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
         servers. It generates solutions to move a workload whenever a server's
         CPU utilization % is higher than the specified threshold.
         The VM to be moved should make the host close to average workload
-        of all hypervisors.
+        of all compute nodes.
 
     *Requirements*
 
@@ -54,17 +53,11 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
          reason why we only plan a single virtual machine migration at a time.
          So it's better to use this algorithm with `CONTINUOUS` audits.
        - It assume that live migrations are possible
-
     """
 
     # The meter to report CPU utilization % of VM in ceilometer
     METER_NAME = "cpu_util"
     # Unit: %, value range is [0 , 100]
-    # TODO(Junjie): make it configurable
-    THRESHOLD = 25.0
-    # choose 300 seconds as the default duration of meter aggregation
-    # TODO(Junjie): make it configurable
-    PERIOD = 300
 
     MIGRATION = "migrate"
 
@@ -78,11 +71,8 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
         super(WorkloadBalance, self).__init__(config, osc)
         # the migration plan will be triggered when the CPU utlization %
         # reaches threshold
-        # TODO(Junjie): Threshold should be configurable for each audit
-        self.threshold = self.THRESHOLD
         self._meter = self.METER_NAME
         self._ceilometer = None
-        self._period = self.PERIOD
 
     @property
     def ceilometer(self):
@@ -100,82 +90,107 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
 
     @classmethod
     def get_display_name(cls):
-        return _("workload balance migration strategy")
+        return _("Workload Balance Migration Strategy")
 
     @classmethod
     def get_translatable_display_name(cls):
-        return "workload balance migration strategy"
+        return "Workload Balance Migration Strategy"
 
-    def calculate_used_resource(self, hypervisor, cap_cores, cap_mem,
+    @classmethod
+    def get_schema(cls):
+        # Mandatory default setting for each element
+        return {
+            "properties": {
+                "threshold": {
+                    "description": "workload threshold for migration",
+                    "type": "number",
+                    "default": 25.0
+                },
+                "period": {
+                    "description": "aggregate time period of ceilometer",
+                    "type": "number",
+                    "default": 300
+                },
+            },
+        }
+
+    def calculate_used_resource(self, node, cap_cores, cap_mem,
                                 cap_disk):
         """Calculate the used vcpus, memory and disk based on VM flavors"""
-        vms = self.model.get_mapping().get_node_vms(hypervisor)
+        instances = self.compute_model.mapping.get_node_instances(node)
         vcpus_used = 0
         memory_mb_used = 0
         disk_gb_used = 0
-        for vm_id in vms:
-            vm = self.model.get_vm_from_id(vm_id)
-            vcpus_used += cap_cores.get_capacity(vm)
-            memory_mb_used += cap_mem.get_capacity(vm)
-            disk_gb_used += cap_disk.get_capacity(vm)
+        for instance_id in instances:
+            instance = self.compute_model.get_instance_by_uuid(instance_id)
+            vcpus_used += cap_cores.get_capacity(instance)
+            memory_mb_used += cap_mem.get_capacity(instance)
+            disk_gb_used += cap_disk.get_capacity(instance)
 
         return vcpus_used, memory_mb_used, disk_gb_used
 
-    def choose_vm_to_migrate(self, hosts, avg_workload, workload_cache):
-        """Pick up an active vm instance to migrate from provided hosts
+    def choose_instance_to_migrate(self, hosts, avg_workload, workload_cache):
+        """Pick up an active instance instance to migrate from provided hosts
 
-        :param hosts: the array of dict which contains hypervisor object
-        :param avg_workload: the average workload value of all hypervisors
-        :param workload_cache: the map contains vm to workload mapping
+        :param hosts: the array of dict which contains node object
+        :param avg_workload: the average workload value of all nodes
+        :param workload_cache: the map contains instance to workload mapping
         """
-        for hvmap in hosts:
-            source_hypervisor = hvmap['hv']
-            source_vms = self.model.get_mapping().get_node_vms(
-                source_hypervisor)
-            if source_vms:
-                delta_workload = hvmap['workload'] - avg_workload
+        for instance_data in hosts:
+            source_node = instance_data['node']
+            source_instances = self.compute_model.mapping.get_node_instances(
+                source_node)
+            if source_instances:
+                delta_workload = instance_data['workload'] - avg_workload
                 min_delta = 1000000
                 instance_id = None
-                for vm_id in source_vms:
+                for inst_id in source_instances:
                     try:
                         # select the first active VM to migrate
-                        vm = self.model.get_vm_from_id(vm_id)
-                        if vm.state != vm_state.VMState.ACTIVE.value:
-                            LOG.debug("VM not active, skipped: %s",
-                                      vm.uuid)
+                        instance = self.compute_model.get_instance_by_uuid(
+                            inst_id)
+                        if (instance.state !=
+                                element.InstanceState.ACTIVE.value):
+                            LOG.debug("Instance not active, skipped: %s",
+                                      instance.uuid)
                             continue
-                        current_delta = delta_workload - workload_cache[vm_id]
+                        current_delta = (
+                            delta_workload - workload_cache[inst_id])
                         if 0 <= current_delta < min_delta:
                             min_delta = current_delta
-                            instance_id = vm_id
+                            instance_id = inst_id
                     except wexc.InstanceNotFound:
-                        LOG.error(_LE("VM not found Error: %s"), vm_id)
+                        LOG.error(_LE("Instance not found; error: %s"),
+                                  instance_id)
                 if instance_id:
-                    return source_hypervisor, self.model.get_vm_from_id(
-                        instance_id)
+                    return (source_node,
+                            self.compute_model.get_instance_by_uuid(
+                                instance_id))
             else:
-                LOG.info(_LI("VM not found from hypervisor: %s"),
-                         source_hypervisor.uuid)
+                LOG.info(_LI("VM not found from node: %s"),
+                         source_node.uuid)
 
-    def filter_destination_hosts(self, hosts, vm_to_migrate,
+    def filter_destination_hosts(self, hosts, instance_to_migrate,
                                  avg_workload, workload_cache):
         '''Only return hosts with sufficient available resources'''
 
-        cap_cores = self.model.get_resource_from_id(
-            resource.ResourceType.cpu_cores)
-        cap_disk = self.model.get_resource_from_id(resource.ResourceType.disk)
-        cap_mem = self.model.get_resource_from_id(resource.ResourceType.memory)
+        cap_cores = self.compute_model.get_resource_by_uuid(
+            element.ResourceType.cpu_cores)
+        cap_disk = self.compute_model.get_resource_by_uuid(
+            element.ResourceType.disk)
+        cap_mem = self.compute_model.get_resource_by_uuid(
+            element.ResourceType.memory)
 
-        required_cores = cap_cores.get_capacity(vm_to_migrate)
-        required_disk = cap_disk.get_capacity(vm_to_migrate)
-        required_mem = cap_mem.get_capacity(vm_to_migrate)
+        required_cores = cap_cores.get_capacity(instance_to_migrate)
+        required_disk = cap_disk.get_capacity(instance_to_migrate)
+        required_mem = cap_mem.get_capacity(instance_to_migrate)
 
-        # filter hypervisors without enough resource
+        # filter nodes without enough resource
         destination_hosts = []
-        src_vm_workload = workload_cache[vm_to_migrate.uuid]
-        for hvmap in hosts:
-            host = hvmap['hv']
-            workload = hvmap['workload']
+        src_instance_workload = workload_cache[instance_to_migrate.uuid]
+        for instance_data in hosts:
+            host = instance_data['node']
+            workload = instance_data['workload']
             # calculate the available resources
             cores_used, mem_used, disk_used = self.calculate_used_resource(
                 host, cap_cores, cap_mem, cap_disk)
@@ -186,29 +201,29 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
                     cores_available >= required_cores and
                     disk_available >= required_disk and
                     mem_available >= required_mem and
-                    (src_vm_workload + workload) < self.threshold / 100 *
+                    (src_instance_workload + workload) < self.threshold / 100 *
                     cap_cores.get_capacity(host)
             ):
-                destination_hosts.append(hvmap)
+                destination_hosts.append(instance_data)
 
         return destination_hosts
 
     def group_hosts_by_cpu_util(self):
-        """Calculate the workloads of each hypervisor
+        """Calculate the workloads of each node
 
-        try to find out the hypervisors which have reached threshold
-        and the hypervisors which are under threshold.
-        and also calculate the average workload value of all hypervisors.
-        and also generate the VM workload map.
+        try to find out the nodes which have reached threshold
+        and the nodes which are under threshold.
+        and also calculate the average workload value of all nodes.
+        and also generate the instance workload map.
         """
 
-        hypervisors = self.model.get_all_hypervisors()
-        cluster_size = len(hypervisors)
-        if not hypervisors:
+        nodes = self.compute_model.get_all_compute_nodes()
+        cluster_size = len(nodes)
+        if not nodes:
             raise wexc.ClusterEmpty()
-        # get cpu cores capacity of hypervisors and vms
-        cap_cores = self.model.get_resource_from_id(
-            resource.ResourceType.cpu_cores)
+        # get cpu cores capacity of nodes and instances
+        cap_cores = self.compute_model.get_resource_by_uuid(
+            element.ResourceType.cpu_cores)
         overload_hosts = []
         nonoverload_hosts = []
         # total workload of cluster
@@ -216,41 +231,43 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
         cluster_workload = 0.0
         # use workload_cache to store the workload of VMs for reuse purpose
         workload_cache = {}
-        for hypervisor_id in hypervisors:
-            hypervisor = self.model.get_hypervisor_from_id(hypervisor_id)
-            vms = self.model.get_mapping().get_node_vms(hypervisor)
-            hypervisor_workload = 0.0
-            for vm_id in vms:
-                vm = self.model.get_vm_from_id(vm_id)
+        for node_id in nodes:
+            node = self.compute_model.get_node_by_uuid(
+                node_id)
+            instances = self.compute_model.mapping.get_node_instances(node)
+            node_workload = 0.0
+            for instance_id in instances:
+                instance = self.compute_model.get_instance_by_uuid(instance_id)
                 try:
                     cpu_util = self.ceilometer.statistic_aggregation(
-                        resource_id=vm_id,
+                        resource_id=instance_id,
                         meter_name=self._meter,
                         period=self._period,
                         aggregate='avg')
                 except Exception as exc:
                     LOG.exception(exc)
-                    LOG.error(_LE("Can not get cpu_util"))
+                    LOG.error(_LE("Can not get cpu_util from Ceilometer"))
                     continue
                 if cpu_util is None:
-                    LOG.debug("%s: cpu_util is None", vm_id)
+                    LOG.debug("Instance (%s): cpu_util is None", instance_id)
                     continue
-                vm_cores = cap_cores.get_capacity(vm)
-                workload_cache[vm_id] = cpu_util * vm_cores / 100
-                hypervisor_workload += workload_cache[vm_id]
-                LOG.debug("%s: cpu_util %f", vm_id, cpu_util)
-            hypervisor_cores = cap_cores.get_capacity(hypervisor)
-            hy_cpu_util = hypervisor_workload / hypervisor_cores * 100
+                instance_cores = cap_cores.get_capacity(instance)
+                workload_cache[instance_id] = cpu_util * instance_cores / 100
+                node_workload += workload_cache[instance_id]
+                LOG.debug("VM (%s): cpu_util %f", instance_id, cpu_util)
+            node_cores = cap_cores.get_capacity(node)
+            hy_cpu_util = node_workload / node_cores * 100
 
-            cluster_workload += hypervisor_workload
+            cluster_workload += node_workload
 
-            hvmap = {'hv': hypervisor, "cpu_util": hy_cpu_util, 'workload':
-                     hypervisor_workload}
+            instance_data = {
+                'node': node, "cpu_util": hy_cpu_util,
+                'workload': node_workload}
             if hy_cpu_util >= self.threshold:
-                # mark the hypervisor to release resources
-                overload_hosts.append(hvmap)
+                # mark the node to release resources
+                overload_hosts.append(instance_data)
             else:
-                nonoverload_hosts.append(hvmap)
+                nonoverload_hosts.append(instance_data)
 
         avg_workload = cluster_workload / cluster_size
 
@@ -263,22 +280,26 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
         """
         LOG.info(_LI("Initializing Workload Balance Strategy"))
 
-        if self.model is None:
+        if not self.compute_model:
             raise wexc.ClusterStateNotDefined()
+
+        LOG.debug(self.compute_model.to_string())
 
     def do_execute(self):
         """Strategy execution phase
 
         This phase is where you should put the main logic of your strategy.
         """
-        src_hypervisors, target_hypervisors, avg_workload, workload_cache = (
+        self.threshold = self.input_parameters.threshold
+        self._period = self.input_parameters.period
+        source_nodes, target_nodes, avg_workload, workload_cache = (
             self.group_hosts_by_cpu_util())
 
-        if not src_hypervisors:
+        if not source_nodes:
             LOG.debug("No hosts require optimization")
             return self.solution
 
-        if not target_hypervisors:
+        if not target_nodes:
             LOG.warning(_LW("No hosts current have CPU utilization under %s "
                             "percent, therefore there are no possible target "
                             "hosts for any migration"),
@@ -286,18 +307,18 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
             return self.solution
 
         # choose the server with largest cpu_util
-        src_hypervisors = sorted(src_hypervisors,
-                                 reverse=True,
-                                 key=lambda x: (x[self.METER_NAME]))
+        source_nodes = sorted(source_nodes,
+                              reverse=True,
+                              key=lambda x: (x[self.METER_NAME]))
 
-        vm_to_migrate = self.choose_vm_to_migrate(
-            src_hypervisors, avg_workload, workload_cache)
-        if not vm_to_migrate:
+        instance_to_migrate = self.choose_instance_to_migrate(
+            source_nodes, avg_workload, workload_cache)
+        if not instance_to_migrate:
             return self.solution
-        source_hypervisor, vm_src = vm_to_migrate
+        source_node, instance_src = instance_to_migrate
         # find the hosts that have enough resource for the VM to be migrated
         destination_hosts = self.filter_destination_hosts(
-            target_hypervisors, vm_src, avg_workload, workload_cache)
+            target_nodes, instance_src, avg_workload, workload_cache)
         # sort the filtered result by workload
         # pick up the lowest one as dest server
         if not destination_hosts:
@@ -308,15 +329,15 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
         destination_hosts = sorted(destination_hosts,
                                    key=lambda x: (x["cpu_util"]))
         # always use the host with lowerest CPU utilization
-        mig_dst_hypervisor = destination_hosts[0]['hv']
-        # generate solution to migrate the vm to the dest server,
-        if self.model.get_mapping().migrate_vm(vm_src, source_hypervisor,
-                                               mig_dst_hypervisor):
+        mig_destination_node = destination_hosts[0]['node']
+        # generate solution to migrate the instance to the dest server,
+        if self.compute_model.migrate_instance(
+                instance_src, source_node, mig_destination_node):
             parameters = {'migration_type': 'live',
-                          'src_hypervisor': source_hypervisor.uuid,
-                          'dst_hypervisor': mig_dst_hypervisor.uuid}
+                          'source_node': source_node.uuid,
+                          'destination_node': mig_destination_node.uuid}
             self.solution.add_action(action_type=self.MIGRATION,
-                                     resource_id=vm_src.uuid,
+                                     resource_id=instance_src.uuid,
                                      input_parameters=parameters)
 
     def post_execute(self):
@@ -324,4 +345,6 @@ class WorkloadBalance(base.WorkloadStabilizationBaseStrategy):
 
         This can be used to compute the global efficacy
         """
-        self.solution.model = self.model
+        self.solution.model = self.compute_model
+
+        LOG.debug(self.compute_model.to_string())

@@ -18,11 +18,9 @@
 #
 
 from oslo_config import cfg
-from oslo_log import log
 
 from watcher.applier.messaging import trigger
 
-LOG = log.getLogger(__name__)
 CONF = cfg.CONF
 
 
@@ -68,6 +66,8 @@ class ApplierManager(object):
 
     conductor_endpoints = [trigger.TriggerActionPlan]
     status_endpoints = []
+    notification_endpoints = []
+    notification_topics = []
 
     def __init__(self):
         self.publisher_id = CONF.watcher_applier.publisher_id

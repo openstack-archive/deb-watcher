@@ -99,14 +99,14 @@ The :ref:`Cluster <cluster_definition>` may be divided in one or several
 Cluster Data Model
 ==================
 
-.. watcher-term:: watcher.metrics_engine.cluster_model_collector.base
+.. watcher-term:: watcher.decision_engine.model.collector.base
 
 .. _cluster_history_definition:
 
 Cluster History
 ===============
 
-.. watcher-term:: watcher.metrics_engine.cluster_history.base
+.. watcher-term:: watcher.decision_engine.cluster.history.base
 
 .. _controller_node_definition:
 
@@ -280,6 +280,12 @@ specific domain.
 Please, read `the official OpenStack definition of a Project
 <http://docs.openstack.org/glossary/content/glossary.html>`_.
 
+.. _scoring_engine_definition:
+
+Scoring Engine
+==============
+
+.. watcher-term::  watcher.api.controllers.v1.scoring_engine
 
 .. _sla_definition:
 

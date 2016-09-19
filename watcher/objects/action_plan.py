@@ -97,6 +97,7 @@ class ActionPlan(base.WatcherObject):
         'id': int,
         'uuid': obj_utils.str_or_none,
         'audit_id': obj_utils.int_or_none,
+        'strategy_id': obj_utils.int_or_none,
         'first_action_id': obj_utils.int_or_none,
         'state': obj_utils.str_or_none,
         'global_efficacy': obj_utils.dict_or_none,
@@ -250,10 +251,10 @@ class ActionPlan(base.WatcherObject):
         for field in self.fields:
             if (hasattr(self, base.get_attrname(field)) and
                     self[field] != current[field]):
-                    self[field] = current[field]
+                self[field] = current[field]
 
     def soft_delete(self, context=None):
-        """soft Delete the Action plan from the DB.
+        """Soft Delete the Action plan from the DB.
 
         :param context: Security context. NOTE: This should only
                         be used internally by the indirection_api.

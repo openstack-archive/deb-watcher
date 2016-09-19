@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from watcher.decision_engine.strategy.strategies import basic_consolidation
 from watcher.decision_engine.strategy.strategies import dummy_strategy
+from watcher.decision_engine.strategy.strategies import dummy_with_scorer
 from watcher.decision_engine.strategy.strategies import outlet_temp_control
 from watcher.decision_engine.strategy.strategies import uniform_airflow
 from watcher.decision_engine.strategy.strategies import \
@@ -27,11 +27,12 @@ from watcher.decision_engine.strategy.strategies import workload_stabilization
 BasicConsolidation = basic_consolidation.BasicConsolidation
 OutletTempControl = outlet_temp_control.OutletTempControl
 DummyStrategy = dummy_strategy.DummyStrategy
+DummyWithScorer = dummy_with_scorer.DummyWithScorer
 VMWorkloadConsolidation = vm_workload_consolidation.VMWorkloadConsolidation
 WorkloadBalance = workload_balance.WorkloadBalance
 WorkloadStabilization = workload_stabilization.WorkloadStabilization
 UniformAirflow = uniform_airflow.UniformAirflow
 
 __all__ = ("BasicConsolidation", "OutletTempControl", "DummyStrategy",
-           "VMWorkloadConsolidation", "WorkloadBalance",
+           "DummyWithScorer", "VMWorkloadConsolidation", "WorkloadBalance",
            "WorkloadStabilization", "UniformAirflow")

@@ -19,7 +19,6 @@
 from oslo_log import log
 
 from watcher._i18n import _
-from watcher.common import exception
 from watcher.decision_engine.strategy.strategies import base
 
 LOG = log.getLogger(__name__)
@@ -30,8 +29,8 @@ class DummyStrategy(base.DummyBaseStrategy):
 
     *Description*
 
-    This strategy does not provide any useful optimization. Indeed, its only
-    purpose is to be used by Tempest tests.
+    This strategy does not provide any useful optimization. Its only purpose
+    is to be used by Tempest tests.
 
     *Requirements*
 
@@ -50,8 +49,7 @@ class DummyStrategy(base.DummyBaseStrategy):
     SLEEP = "sleep"
 
     def pre_execute(self):
-        if self.model is None:
-            raise exception.ClusterStateNotDefined()
+        pass
 
     def do_execute(self):
         para1 = self.input_parameters.para1

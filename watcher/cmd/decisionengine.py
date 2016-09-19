@@ -22,11 +22,12 @@ import sys
 
 from oslo_config import cfg
 from oslo_log import log as logging
-from oslo_service import service
 
 from watcher._i18n import _LI
 from watcher.common import service as watcher_service
+from watcher.decision_engine import gmr
 from watcher.decision_engine import manager
+from watcher.decision_engine import scheduling
 from watcher.decision_engine import sync
 
 LOG = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ CONF = cfg.CONF
 
 def main():
     watcher_service.prepare_service(sys.argv)
+    gmr.register_gmr_plugins()
 
     LOG.info(_LI('Starting Watcher Decision Engine service in PID %s'),
              os.getpid())
@@ -43,5 +45,10 @@ def main():
     syncer.sync()
 
     de_service = watcher_service.Service(manager.DecisionEngineManager)
-    launcher = service.launch(CONF, de_service)
+    bg_schedulder_service = scheduling.DecisionEngineSchedulingService()
+
+    # Only 1 process
+    launcher = watcher_service.launch(CONF, de_service)
+    launcher.launch_service(bg_schedulder_service)
+
     launcher.wait()

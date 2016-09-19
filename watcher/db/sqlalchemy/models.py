@@ -16,11 +16,10 @@
 SQLAlchemy models for watcher service
 """
 
-import json
-
 from oslo_config import cfg
 from oslo_db import options as db_options
 from oslo_db.sqlalchemy import models
+from oslo_serialization import jsonutils
 import six.moves.urllib.parse as urlparse
 from sqlalchemy import Column
 from sqlalchemy import DateTime
@@ -30,6 +29,7 @@ from sqlalchemy import Integer
 from sqlalchemy import Numeric
 from sqlalchemy import schema
 from sqlalchemy import String
+from sqlalchemy import Text
 from sqlalchemy.types import TypeDecorator, TEXT
 
 from watcher.common import paths
@@ -70,12 +70,12 @@ class JsonEncodedType(TypeDecorator):
                             % (self.__class__.__name__,
                                self.type.__name__,
                                type(value).__name__))
-        serialized_value = json.dumps(value)
+        serialized_value = jsonutils.dumps(value)
         return serialized_value
 
     def process_result_value(self, value, dialect):
         if value is not None:
-            value = json.loads(value)
+            value = jsonutils.loads(value)
         return value
 
 
@@ -174,10 +174,11 @@ class Audit(Base):
     audit_type = Column(String(20))
     state = Column(String(20), nullable=True)
     deadline = Column(DateTime, nullable=True)
-    audit_template_id = Column(Integer, ForeignKey('audit_templates.id'),
-                               nullable=False)
     parameters = Column(JSONEncodedDict, nullable=True)
     interval = Column(Integer, nullable=True)
+    host_aggregate = Column(Integer, nullable=True)
+    goal_id = Column(Integer, ForeignKey('goals.id'), nullable=False)
+    strategy_id = Column(Integer, ForeignKey('strategies.id'), nullable=True)
 
 
 class Action(Base):
@@ -210,7 +211,8 @@ class ActionPlan(Base):
     id = Column(Integer, primary_key=True)
     uuid = Column(String(36))
     first_action_id = Column(Integer)
-    audit_id = Column(Integer, ForeignKey('audits.id'), nullable=True)
+    audit_id = Column(Integer, ForeignKey('audits.id'), nullable=False)
+    strategy_id = Column(Integer, ForeignKey('strategies.id'), nullable=False)
     state = Column(String(20), nullable=True)
     global_efficacy = Column(JSONEncodedDict, nullable=True)
 
@@ -231,3 +233,21 @@ class EfficacyIndicator(Base):
     value = Column(Numeric())
     action_plan_id = Column(Integer, ForeignKey('action_plans.id'),
                             nullable=False)
+
+
+class ScoringEngine(Base):
+    """Represents a scoring engine."""
+
+    __tablename__ = 'scoring_engines'
+    __table_args__ = (
+        schema.UniqueConstraint('uuid', name='uniq_scoring_engines0uuid'),
+        table_args()
+    )
+    id = Column(Integer, primary_key=True)
+    uuid = Column(String(36), nullable=False)
+    name = Column(String(63), nullable=False)
+    description = Column(String(255), nullable=True)
+    # Metainfo might contain some additional information about the data model.
+    # The format might vary between different models (e.g. be JSON, XML or
+    # even some custom format), the blob type should cover all scenarios.
+    metainfo = Column(Text, nullable=True)

@@ -31,12 +31,9 @@ from oslo_log import log
 
 from watcher._i18n import _, _LE, _LI, _LW
 from watcher.common import exception
-from watcher.decision_engine.model import hypervisor_state as hyper_state
-from watcher.decision_engine.model import resource
-from watcher.decision_engine.model import vm_state
+from watcher.decision_engine.cluster.history import ceilometer as cch
+from watcher.decision_engine.model import element
 from watcher.decision_engine.strategy.strategies import base
-from watcher.metrics_engine.cluster_history import ceilometer as \
-    ceilometer_cluster_history
 
 LOG = log.getLogger(__name__)
 
@@ -58,7 +55,7 @@ class BasicConsolidation(base.ServerConsolidationBaseStrategy):
     - It has been developed only for tests.
     - It assumes that the virtual machine and the compute node are on the same
       private network.
-    - It assume that live migrations are possible
+    - It assumes that live migrations are possible.
 
     *Spec URL*
 
@@ -92,20 +89,20 @@ class BasicConsolidation(base.ServerConsolidationBaseStrategy):
 
         self._ceilometer = None
 
-        # TODO(jed) improve threshold overbooking ?,...
+        # TODO(jed): improve threshold overbooking?
         self.threshold_mem = 1
         self.threshold_disk = 1
         self.threshold_cores = 1
 
-        # TODO(jed) target efficacy
+        # TODO(jed): target efficacy
         self.target_efficacy = 60
 
-        # TODO(jed) weight
+        # TODO(jed): weight
         self.weight_cpu = 1
         self.weight_mem = 1
         self.weight_disk = 1
 
-        # TODO(jed) bound migration attempts (80 %)
+        # TODO(jed): bound migration attempts (80 %)
         self.bound_migration = 0.80
 
     @classmethod
@@ -123,8 +120,7 @@ class BasicConsolidation(base.ServerConsolidationBaseStrategy):
     @property
     def ceilometer(self):
         if self._ceilometer is None:
-            self._ceilometer = (ceilometer_cluster_history.
-                                CeilometerClusterHistory(osc=self.osc))
+            self._ceilometer = cch.CeilometerClusterHistory(osc=self.osc)
         return self._ceilometer
 
     @ceilometer.setter
@@ -138,64 +134,66 @@ class BasicConsolidation(base.ServerConsolidationBaseStrategy):
         """
         self.migration_attempts = size_cluster * self.bound_migration
 
-    def check_migration(self, src_hypervisor, dest_hypervisor, vm_to_mig):
+    def check_migration(self, source_node, destination_node,
+                        instance_to_migrate):
         """Check if the migration is possible
 
-        :param src_hypervisor: the current node of the virtual machine
-        :param dest_hypervisor: the destination of the virtual machine
-        :param vm_to_mig: the virtual machine
+        :param source_node: the current node of the virtual machine
+        :param destination_node: the destination of the virtual machine
+        :param instance_to_migrate: the instance / virtual machine
         :return: True if the there is enough place otherwise false
         """
-        if src_hypervisor == dest_hypervisor:
+        if source_node == destination_node:
             return False
 
-        LOG.debug('Migrate VM %s from %s to  %s',
-                  vm_to_mig, src_hypervisor, dest_hypervisor)
+        LOG.debug('Migrate instance %s from %s to  %s',
+                  instance_to_migrate, source_node, destination_node)
 
         total_cores = 0
         total_disk = 0
         total_mem = 0
-        cpu_capacity = self.model.get_resource_from_id(
-            resource.ResourceType.cpu_cores)
-        disk_capacity = self.model.get_resource_from_id(
-            resource.ResourceType.disk)
-        memory_capacity = self.model.get_resource_from_id(
-            resource.ResourceType.memory)
+        cpu_capacity = self.compute_model.get_resource_by_uuid(
+            element.ResourceType.cpu_cores)
+        disk_capacity = self.compute_model.get_resource_by_uuid(
+            element.ResourceType.disk)
+        memory_capacity = self.compute_model.get_resource_by_uuid(
+            element.ResourceType.memory)
 
-        for vm_id in self.model. \
-                get_mapping().get_node_vms(dest_hypervisor):
-            vm = self.model.get_vm_from_id(vm_id)
-            total_cores += cpu_capacity.get_capacity(vm)
-            total_disk += disk_capacity.get_capacity(vm)
-            total_mem += memory_capacity.get_capacity(vm)
+        for instance_id in self.compute_model.mapping.get_node_instances(
+                destination_node):
+            instance = self.compute_model.get_instance_by_uuid(instance_id)
+            total_cores += cpu_capacity.get_capacity(instance)
+            total_disk += disk_capacity.get_capacity(instance)
+            total_mem += memory_capacity.get_capacity(instance)
 
-        # capacity requested by hypervisor
-        total_cores += cpu_capacity.get_capacity(vm_to_mig)
-        total_disk += disk_capacity.get_capacity(vm_to_mig)
-        total_mem += memory_capacity.get_capacity(vm_to_mig)
+        # capacity requested by the compute node
+        total_cores += cpu_capacity.get_capacity(instance_to_migrate)
+        total_disk += disk_capacity.get_capacity(instance_to_migrate)
+        total_mem += memory_capacity.get_capacity(instance_to_migrate)
 
-        return self.check_threshold(dest_hypervisor, total_cores, total_disk,
+        return self.check_threshold(destination_node, total_cores, total_disk,
                                     total_mem)
 
-    def check_threshold(self, dest_hypervisor, total_cores,
+    def check_threshold(self, destination_node, total_cores,
                         total_disk, total_mem):
         """Check threshold
 
-        check the threshold value defined by the ratio of
+        Check the threshold value defined by the ratio of
         aggregated CPU capacity of VMs on one node to CPU capacity
         of this node must not exceed the threshold value.
-        :param dest_hypervisor: the destination of the virtual machine
-        :param total_cores
-        :param total_disk
-        :param total_mem
+
+        :param destination_node: the destination of the virtual machine
+        :param total_cores: total cores of the virtual machine
+        :param total_disk: total disk size used by the virtual machine
+        :param total_mem: total memory used by the virtual machine
         :return: True if the threshold is not exceed
         """
-        cpu_capacity = self.model.get_resource_from_id(
-            resource.ResourceType.cpu_cores).get_capacity(dest_hypervisor)
-        disk_capacity = self.model.get_resource_from_id(
-            resource.ResourceType.disk).get_capacity(dest_hypervisor)
-        memory_capacity = self.model.get_resource_from_id(
-            resource.ResourceType.memory).get_capacity(dest_hypervisor)
+        cpu_capacity = self.compute_model.get_resource_by_uuid(
+            element.ResourceType.cpu_cores).get_capacity(destination_node)
+        disk_capacity = self.compute_model.get_resource_by_uuid(
+            element.ResourceType.disk).get_capacity(destination_node)
+        memory_capacity = self.compute_model.get_resource_by_uuid(
+            element.ResourceType.memory).get_capacity(destination_node)
 
         return (cpu_capacity >= total_cores * self.threshold_cores and
                 disk_capacity >= total_disk * self.threshold_disk and
@@ -205,34 +203,35 @@ class BasicConsolidation(base.ServerConsolidationBaseStrategy):
         """Allowed migration
 
         Maximum allowed number of migrations this allows us to fix
-        the upper bound of the number of migrations
+        the upper bound of the number of migrations.
+
         :return:
         """
         return self.migration_attempts
 
-    def calculate_weight(self, element, total_cores_used, total_disk_used,
-                         total_memory_used):
+    def calculate_weight(self, compute_resource, total_cores_used,
+                         total_disk_used, total_memory_used):
         """Calculate weight of every resource
 
-        :param element:
+        :param compute_resource:
         :param total_cores_used:
         :param total_disk_used:
         :param total_memory_used:
         :return:
         """
-        cpu_capacity = self.model.get_resource_from_id(
-            resource.ResourceType.cpu_cores).get_capacity(element)
+        cpu_capacity = self.compute_model.get_resource_by_uuid(
+            element.ResourceType.cpu_cores).get_capacity(compute_resource)
 
-        disk_capacity = self.model.get_resource_from_id(
-            resource.ResourceType.disk).get_capacity(element)
+        disk_capacity = self.compute_model.get_resource_by_uuid(
+            element.ResourceType.disk).get_capacity(compute_resource)
 
-        memory_capacity = self.model.get_resource_from_id(
-            resource.ResourceType.memory).get_capacity(element)
+        memory_capacity = self.compute_model.get_resource_by_uuid(
+            element.ResourceType.memory).get_capacity(compute_resource)
 
         score_cores = (1 - (float(cpu_capacity) - float(total_cores_used)) /
                        float(cpu_capacity))
 
-        # It's possible that disk_capacity is 0, e.g. m1.nano.disk = 0
+        # It's possible that disk_capacity is 0, e.g., m1.nano.disk = 0
         if disk_capacity == 0:
             score_disk = 0
         else:
@@ -242,37 +241,37 @@ class BasicConsolidation(base.ServerConsolidationBaseStrategy):
         score_memory = (
             1 - (float(memory_capacity) - float(total_memory_used)) /
             float(memory_capacity))
-        # todo(jed) take in account weight
+        # TODO(jed): take in account weight
         return (score_cores + score_disk + score_memory) / 3
 
-    def calculate_score_node(self, hypervisor):
+    def calculate_score_node(self, node):
         """Calculate the score that represent the utilization level
 
-        :param hypervisor:
-        :return:
+        :param node: :py:class:`~.ComputeNode` instance
+        :return: Score for the given compute node
+        :rtype: float
         """
-        resource_id = "%s_%s" % (hypervisor.uuid, hypervisor.hostname)
-        host_avg_cpu_util = self.ceilometer. \
-            statistic_aggregation(resource_id=resource_id,
-                                  meter_name=self.HOST_CPU_USAGE_METRIC_NAME,
-                                  period="7200",
-                                  aggregate='avg')
+        resource_id = "%s_%s" % (node.uuid, node.hostname)
+        host_avg_cpu_util = self.ceilometer.statistic_aggregation(
+            resource_id=resource_id,
+            meter_name=self.HOST_CPU_USAGE_METRIC_NAME,
+            period="7200",
+            aggregate='avg')
 
         if host_avg_cpu_util is None:
             LOG.error(
                 _LE("No values returned by %(resource_id)s "
-                    "for %(metric_name)s"),
-                resource_id=resource_id,
-                metric_name=self.HOST_CPU_USAGE_METRIC_NAME,
-            )
+                    "for %(metric_name)s") % dict(
+                        resource_id=resource_id,
+                        metric_name=self.HOST_CPU_USAGE_METRIC_NAME))
             host_avg_cpu_util = 100
 
-        cpu_capacity = self.model.get_resource_from_id(
-            resource.ResourceType.cpu_cores).get_capacity(hypervisor)
+        cpu_capacity = self.compute_model.get_resource_by_uuid(
+            element.ResourceType.cpu_cores).get_capacity(node)
 
-        total_cores_used = cpu_capacity * (host_avg_cpu_util / 100)
+        total_cores_used = cpu_capacity * (host_avg_cpu_util / 100.0)
 
-        return self.calculate_weight(hypervisor, total_cores_used, 0, 0)
+        return self.calculate_weight(node, total_cores_used, 0, 0)
 
     def calculate_migration_efficacy(self):
         """Calculate migration efficacy
@@ -286,35 +285,33 @@ class BasicConsolidation(base.ServerConsolidationBaseStrategy):
         else:
             return 0
 
-    def calculate_score_vm(self, vm):
+    def calculate_score_instance(self, instance):
         """Calculate Score of virtual machine
 
-        :param vm: the virtual machine
-        :param self.model: the cluster model
+        :param instance: the virtual machine
         :return: score
         """
-        vm_cpu_utilization = self.ceilometer. \
+        instance_cpu_utilization = self.ceilometer. \
             statistic_aggregation(
-                resource_id=vm.uuid,
+                resource_id=instance.uuid,
                 meter_name=self.INSTANCE_CPU_USAGE_METRIC_NAME,
                 period="7200",
                 aggregate='avg'
             )
-        if vm_cpu_utilization is None:
+        if instance_cpu_utilization is None:
             LOG.error(
                 _LE("No values returned by %(resource_id)s "
-                    "for %(metric_name)s"),
-                resource_id=vm.uuid,
-                metric_name=self.INSTANCE_CPU_USAGE_METRIC_NAME,
-            )
-            vm_cpu_utilization = 100
+                    "for %(metric_name)s") % dict(
+                        resource_id=instance.uuid,
+                        metric_name=self.INSTANCE_CPU_USAGE_METRIC_NAME))
+            instance_cpu_utilization = 100
 
-        cpu_capacity = self.model.get_resource_from_id(
-            resource.ResourceType.cpu_cores).get_capacity(vm)
+        cpu_capacity = self.compute_model.get_resource_by_uuid(
+            element.ResourceType.cpu_cores).get_capacity(instance)
 
-        total_cores_used = cpu_capacity * (vm_cpu_utilization / 100.0)
+        total_cores_used = cpu_capacity * (instance_cpu_utilization / 100.0)
 
-        return self.calculate_weight(vm, total_cores_used, 0, 0)
+        return self.calculate_weight(instance, total_cores_used, 0, 0)
 
     def add_change_service_state(self, resource_id, state):
         parameters = {'state': state}
@@ -325,79 +322,76 @@ class BasicConsolidation(base.ServerConsolidationBaseStrategy):
     def add_migration(self,
                       resource_id,
                       migration_type,
-                      src_hypervisor,
-                      dst_hypervisor):
+                      source_node,
+                      destination_node):
         parameters = {'migration_type': migration_type,
-                      'src_hypervisor': src_hypervisor,
-                      'dst_hypervisor': dst_hypervisor}
+                      'source_node': source_node,
+                      'destination_node': destination_node}
         self.solution.add_action(action_type=self.MIGRATION,
                                  resource_id=resource_id,
                                  input_parameters=parameters)
 
     def score_of_nodes(self, score):
         """Calculate score of nodes based on load by VMs"""
-        for hypervisor_id in self.model.get_all_hypervisors():
-            hypervisor = self.model. \
-                get_hypervisor_from_id(hypervisor_id)
-            count = self.model.get_mapping(). \
-                get_node_vms_from_id(hypervisor_id)
+        for node in self.compute_model.get_all_compute_nodes().values():
+            count = self.compute_model.mapping.get_node_instances(node)
             if len(count) > 0:
-                result = self.calculate_score_node(hypervisor)
+                result = self.calculate_score_node(node)
             else:
-                # The hypervisor has not VMs
+                # The node has not VMs
                 result = 0
             if len(count) > 0:
-                score.append((hypervisor_id, result))
+                score.append((node.uuid, result))
         return score
 
-    def node_and_vm_score(self, sorted_score, score):
-        """Get List of VMs from Node"""
+    def node_and_instance_score(self, sorted_score, score):
+        """Get List of VMs from node"""
         node_to_release = sorted_score[len(score) - 1][0]
-        vms_to_mig = self.model.get_mapping().get_node_vms_from_id(
-            node_to_release)
+        instances_to_migrate = self.compute_model.mapping.get_node_instances(
+            self.compute_model.get_node_by_uuid(node_to_release))
 
-        vm_score = []
-        for vm_id in vms_to_mig:
-            vm = self.model.get_vm_from_id(vm_id)
-            if vm.state == vm_state.VMState.ACTIVE.value:
-                vm_score.append(
-                    (vm_id, self.calculate_score_vm(vm)))
+        instance_score = []
+        for instance_id in instances_to_migrate:
+            instance = self.compute_model.get_instance_by_uuid(instance_id)
+            if instance.state == element.InstanceState.ACTIVE.value:
+                instance_score.append(
+                    (instance_id, self.calculate_score_instance(instance)))
 
-        return node_to_release, vm_score
+        return node_to_release, instance_score
 
-    def create_migration_vm(self, mig_vm, mig_src_hypervisor,
-                            mig_dst_hypervisor):
+    def create_migration_instance(self, mig_instance, mig_source_node,
+                                  mig_destination_node):
         """Create migration VM"""
-        if self.model.get_mapping().migrate_vm(
-                mig_vm, mig_src_hypervisor, mig_dst_hypervisor):
-            self.add_migration(mig_vm.uuid, 'live',
-                               mig_src_hypervisor.uuid,
-                               mig_dst_hypervisor.uuid)
+        if self.compute_model.migrate_instance(
+                mig_instance, mig_source_node, mig_destination_node):
+            self.add_migration(mig_instance.uuid, 'live',
+                               mig_source_node.uuid,
+                               mig_destination_node.uuid)
 
-        if len(self.model.get_mapping().get_node_vms(
-                mig_src_hypervisor)) == 0:
-            self.add_change_service_state(mig_src_hypervisor.
+        if len(self.compute_model.mapping.get_node_instances(
+                mig_source_node)) == 0:
+            self.add_change_service_state(mig_source_node.
                                           uuid,
-                                          hyper_state.HypervisorState.
-                                          DISABLED.value)
+                                          element.ServiceState.DISABLED.value)
             self.number_of_released_nodes += 1
 
-    def calculate_num_migrations(self, sorted_vms, node_to_release,
+    def calculate_num_migrations(self, sorted_instances, node_to_release,
                                  sorted_score):
         number_migrations = 0
-        for vm in sorted_vms:
+        for instance in sorted_instances:
             for j in range(0, len(sorted_score)):
-                mig_vm = self.model.get_vm_from_id(vm[0])
-                mig_src_hypervisor = self.model.get_hypervisor_from_id(
+                mig_instance = self.compute_model.get_instance_by_uuid(
+                    instance[0])
+                mig_source_node = self.compute_model.get_node_by_uuid(
                     node_to_release)
-                mig_dst_hypervisor = self.model.get_hypervisor_from_id(
+                mig_destination_node = self.compute_model.get_node_by_uuid(
                     sorted_score[j][0])
 
                 result = self.check_migration(
-                    mig_src_hypervisor, mig_dst_hypervisor, mig_vm)
+                    mig_source_node, mig_destination_node, mig_instance)
                 if result:
-                    self.create_migration_vm(
-                        mig_vm, mig_src_hypervisor, mig_dst_hypervisor)
+                    self.create_migration_instance(
+                        mig_instance, mig_source_node, mig_destination_node)
                     number_migrations += 1
                     break
         return number_migrations
@@ -412,8 +406,10 @@ class BasicConsolidation(base.ServerConsolidationBaseStrategy):
 
     def pre_execute(self):
         LOG.info(_LI("Initializing Sercon Consolidation"))
-        if self.model is None:
+        if not self.compute_model:
             raise exception.ClusterStateNotDefined()
+
+        LOG.debug(self.compute_model.to_string())
 
     def do_execute(self):
         # todo(jed) clone model
@@ -421,21 +417,20 @@ class BasicConsolidation(base.ServerConsolidationBaseStrategy):
         unsuccessful_migration = 0
 
         first_migration = True
-        size_cluster = len(self.model.get_all_hypervisors())
+        size_cluster = len(self.compute_model.get_all_compute_nodes())
         if size_cluster == 0:
             raise exception.ClusterEmpty()
 
         self.compute_attempts(size_cluster)
 
-        for hypervisor_id in self.model.get_all_hypervisors():
-            hypervisor = self.model.get_hypervisor_from_id(hypervisor_id)
-            count = self.model.get_mapping(). \
-                get_node_vms_from_id(hypervisor_id)
-            if len(count) == 0:
-                if hypervisor.state == hyper_state.HypervisorState.ENABLED:
-                    self.add_change_service_state(hypervisor_id,
-                                                  hyper_state.HypervisorState.
-                                                  DISABLED.value)
+        for node_uuid, node in self.compute_model.get_all_compute_nodes(
+        ).items():
+            node_instances = self.compute_model.mapping.get_node_instances(
+                node)
+            if node_instances:
+                if node.state == element.ServiceState.ENABLED:
+                    self.add_change_service_state(
+                        node_uuid, element.ServiceState.DISABLED.value)
 
         while self.get_allowed_migration_attempts() >= unsuccessful_migration:
             if not first_migration:
@@ -449,7 +444,7 @@ class BasicConsolidation(base.ServerConsolidationBaseStrategy):
 
             # Sort compute nodes by Score decreasing
             sorted_score = sorted(score, reverse=True, key=lambda x: (x[1]))
-            LOG.debug("Hypervisor(s) BFD %s", sorted_score)
+            LOG.debug("Compute node(s) BFD %s", sorted_score)
 
             # Get Node to be released
             if len(score) == 0:
@@ -458,16 +453,17 @@ class BasicConsolidation(base.ServerConsolidationBaseStrategy):
                     " of the cluster is zero"))
                 break
 
-            node_to_release, vm_score = self.node_and_vm_score(
+            node_to_release, instance_score = self.node_and_instance_score(
                 sorted_score, score)
 
-            # Sort VMs by Score
-            sorted_vms = sorted(vm_score, reverse=True, key=lambda x: (x[1]))
+            # Sort instances by Score
+            sorted_instances = sorted(
+                instance_score, reverse=True, key=lambda x: (x[1]))
             # BFD: Best Fit Decrease
-            LOG.debug("VM(s) BFD %s", sorted_vms)
+            LOG.debug("VM(s) BFD %s", sorted_instances)
 
             migrations = self.calculate_num_migrations(
-                sorted_vms, node_to_release, sorted_score)
+                sorted_instances, node_to_release, sorted_score)
 
             unsuccessful_migration = self.unsuccessful_migration_actualization(
                 migrations, unsuccessful_migration)
@@ -480,6 +476,7 @@ class BasicConsolidation(base.ServerConsolidationBaseStrategy):
 
     def post_execute(self):
         self.solution.set_efficacy_indicators(
-            released_compute_nodes_count=self.number_of_migrations,
-            vm_migrations_count=self.number_of_released_nodes,
+            released_compute_nodes_count=self.number_of_released_nodes,
+            instance_migrations_count=self.number_of_migrations,
         )
+        LOG.debug(self.compute_model.to_string())

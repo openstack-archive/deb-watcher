@@ -80,12 +80,9 @@ Here is an example showing how you can write a plugin called ``DummyAction``:
             pass
 
 
-This implementation is the most basic one. So if you want to have more advanced
-examples, have a look at the implementation of the actions already provided
-by Watcher like.
-To get a better understanding on how to implement a more advanced action,
-have a look at the :py:class:`~watcher.applier.actions.migration.Migrate`
-class.
+This implementation is the most basic one. So in order to get a better
+understanding on how to implement a more advanced action, have a look at the
+:py:class:`~watcher.applier.actions.migration.Migrate` class.
 
 Input validation
 ----------------
@@ -117,11 +114,14 @@ tune the action to its needs. To do so, you can implement the
         def execute(self):
             assert self.config.test_opt == 0
 
-        def get_config_opts(self):
-            return [
+        @classmethod
+        def get_config_opts(cls):
+            return super(
+                DummyAction, cls).get_config_opts() + [
                 cfg.StrOpt('test_opt', help="Demo Option.", default=0),
                 # Some more options ...
             ]
+
 
 The configuration options defined within this class method will be included
 within the global ``watcher.conf`` configuration file under a section named by

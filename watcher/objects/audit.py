@@ -84,9 +84,11 @@ class Audit(base.WatcherObject):
         'audit_type': obj_utils.str_or_none,
         'state': obj_utils.str_or_none,
         'deadline': obj_utils.datetime_or_str_or_none,
-        'audit_template_id': obj_utils.int_or_none,
         'parameters': obj_utils.dict_or_none,
         'interval': obj_utils.int_or_none,
+        'goal_id': obj_utils.int_or_none,
+        'strategy_id': obj_utils.int_or_none,
+        'host_aggregate': obj_utils.int_or_none,
     }
 
     @staticmethod
@@ -250,7 +252,7 @@ class Audit(base.WatcherObject):
         for field in self.fields:
             if (hasattr(self, base.get_attrname(field)) and
                     self[field] != current[field]):
-                    self[field] = current[field]
+                self[field] = current[field]
 
     def soft_delete(self, context=None):
         """soft Delete the Audit from the DB.

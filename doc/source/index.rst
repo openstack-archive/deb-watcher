@@ -57,6 +57,7 @@ Getting Started
   deploy/configuration
   deploy/conf-files
   dev/testing
+  dev/rally_link
 
 API References
 --------------
@@ -74,7 +75,9 @@ Plugins
 
   dev/plugin/base-setup
   dev/plugin/goal-plugin
+  dev/plugin/scoring-engine-plugin
   dev/plugin/strategy-plugin
+  dev/plugin/cdmc-plugin
   dev/plugin/action-plugin
   dev/plugin/planner-plugin
   dev/plugins

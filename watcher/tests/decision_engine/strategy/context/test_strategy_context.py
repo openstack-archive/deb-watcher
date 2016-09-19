@@ -16,11 +16,11 @@
 import mock
 
 from watcher.common import utils
+from watcher.decision_engine.model.collector import manager
 from watcher.decision_engine.solution import default
 from watcher.decision_engine.strategy.context import default as d_strategy_ctx
 from watcher.decision_engine.strategy.selection import default as d_selector
 from watcher.decision_engine.strategy import strategies
-from watcher.metrics_engine.cluster_model_collector import manager
 from watcher.tests.db import base
 from watcher.tests.objects import utils as obj_utils
 
@@ -36,7 +36,7 @@ class TestStrategyContext(base.DbTestCase):
 
     strategy_context = d_strategy_ctx.DefaultStrategyContext()
 
-    @mock.patch.object(strategies.DummyStrategy, 'model',
+    @mock.patch.object(strategies.DummyStrategy, 'compute_model',
                        new_callable=mock.PropertyMock)
     @mock.patch.object(d_selector.DefaultStrategySelector, 'select')
     def test_execute_strategy(self, mock_call, m_model):
@@ -44,7 +44,7 @@ class TestStrategyContext(base.DbTestCase):
         mock_call.return_value = strategies.DummyStrategy(
             config=mock.Mock())
         solution = self.strategy_context.execute_strategy(
-            self.audit.uuid, self.context)
+            self.audit, self.context)
         self.assertIsInstance(solution, default.DefaultSolution)
 
     @mock.patch.object(manager.CollectorManager, "get_cluster_model_collector",
@@ -59,20 +59,13 @@ class TestStrategyContext(base.DbTestCase):
                                                   uuid=utils.generate_uuid(),
                                                   name="dummy")
 
-        audit_template = obj_utils.create_test_audit_template(
-            self.context,
-            uuid=utils.generate_uuid(),
-            strategy_id=strategy.id,
-            name="my_template")
-
         audit = obj_utils.create_test_audit(
             self.context,
-            audit_template_id=audit_template.id,
+            strategy_id=strategy.id,
             uuid=utils.generate_uuid(),
         )
 
-        solution = self.strategy_context.execute_strategy(
-            audit.uuid, self.context)
+        solution = self.strategy_context.execute_strategy(audit, self.context)
 
         self.assertEqual(len(solution.actions), 3)
 
@@ -92,19 +85,12 @@ class TestStrategyContext(base.DbTestCase):
                                                   uuid=utils.generate_uuid(),
                                                   name=expected_strategy)
 
-        audit_template = obj_utils.create_test_audit_template(
-            self.context,
-            uuid=utils.generate_uuid(),
-            strategy_id=strategy.id,
-            name="my_template")
-
         audit = obj_utils.create_test_audit(
             self.context,
-            audit_template_id=audit_template.id,
+            strategy_id=strategy.id,
             uuid=utils.generate_uuid(),
         )
 
-        solution = self.strategy_context.execute_strategy(
-            audit.uuid, self.context)
+        solution = self.strategy_context.execute_strategy(audit, self.context)
 
         self.assertEqual(solution, expected_strategy)

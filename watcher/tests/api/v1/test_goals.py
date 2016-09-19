@@ -10,9 +10,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-import json
-
 from oslo_config import cfg
+from oslo_serialization import jsonutils
 from six.moves.urllib import parse as urlparse
 
 from watcher.common import utils
@@ -83,7 +82,7 @@ class TestListGoal(api_base.FunctionalTest):
                 name='GOAL_{0}'.format(idx))
             goal_list.append(goal.uuid)
         response = self.get_json('/goals')
-        self.assertTrue(len(response['goals']) > 2)
+        self.assertGreater(len(response['goals']), 2)
 
     def test_many_without_soft_deleted(self):
         goal_list = []
@@ -134,7 +133,7 @@ class TestGoalPolicyEnforcement(api_base.FunctionalTest):
         self.assertEqual('application/json', response.content_type)
         self.assertTrue(
             "Policy doesn't allow %s to be performed." % rule,
-            json.loads(response.json['error_message'])['faultstring'])
+            jsonutils.loads(response.json['error_message'])['faultstring'])
 
     def test_policy_disallow_get_all(self):
         self._common_policy_check(

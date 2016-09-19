@@ -21,12 +21,14 @@ import os
 import mock
 from oslo_config import cfg
 from oslo_log import log
+from oslo_messaging import conffixture
 from oslotest import base
 import pecan
 from pecan import testing
 import testscenarios
 
 from watcher.common import context as watcher_context
+from watcher.common import service
 from watcher.objects import base as objects_base
 from watcher.tests import conf_fixture
 from watcher.tests import policy_fixture
@@ -51,11 +53,20 @@ class TestCase(BaseTestCase):
     def setUp(self):
         super(TestCase, self).setUp()
         self.useFixture(conf_fixture.ConfReloadFixture())
-        self.app = testing.load_test_app(os.path.join(
-            os.path.dirname(__file__),
-            'config.py'
-        ))
-        token_info = {
+        self.policy = self.useFixture(policy_fixture.PolicyFixture())
+        self.messaging_conf = self.useFixture(conffixture.ConfFixture(CONF))
+        self.messaging_conf.transport_driver = 'fake'
+
+        cfg.CONF.set_override("auth_type", "admin_token",
+                              group='keystone_authtoken',
+                              enforce_type=True)
+        cfg.CONF.set_override("auth_uri", "http://127.0.0.1/identity",
+                              group='keystone_authtoken',
+                              enforce_type=True)
+
+        app_config_path = os.path.join(os.path.dirname(__file__), 'config.py')
+        self.app = testing.load_test_app(app_config_path)
+        self.token_info = {
             'token': {
                 'project': {
                     'id': 'fake_project'
@@ -66,7 +77,7 @@ class TestCase(BaseTestCase):
             }
         }
         self.context = watcher_context.RequestContext(
-            auth_token_info=token_info,
+            auth_token_info=self.token_info,
             project_id='fake_project',
             user_id='fake_user')
 
@@ -75,7 +86,7 @@ class TestCase(BaseTestCase):
         def make_context(*args, **kwargs):
             # If context hasn't been constructed with token_info
             if not kwargs.get('auth_token_info'):
-                kwargs['auth_token_info'] = copy.deepcopy(token_info)
+                kwargs['auth_token_info'] = copy.deepcopy(self.token_info)
             if not kwargs.get('project_id'):
                 kwargs['project_id'] = 'fake_project'
             if not kwargs.get('user_id'):
@@ -90,10 +101,15 @@ class TestCase(BaseTestCase):
         self.addCleanup(p.stop)
 
         self.useFixture(conf_fixture.ConfFixture(cfg.CONF))
+        self._reset_singletons()
 
         self._base_test_obj_backup = copy.copy(
             objects_base.WatcherObject._obj_classes)
         self.addCleanup(self._restore_obj_registry)
+        self.addCleanup(self._reset_singletons)
+
+    def _reset_singletons(self):
+        service.Singleton._instances.clear()
 
     def _restore_obj_registry(self):
         objects_base.WatcherObject._obj_classes = self._base_test_obj_backup
@@ -114,11 +130,8 @@ class TestCase(BaseTestCase):
         :param project_file: File whose path to return. Default: None.
         :returns: path to the specified file, or path to project root.
         """
-        root = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                            '..',
-                                            '..',
-                                            )
-                               )
+        root = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), '..', '..'))
         if project_file:
             return os.path.join(root, project_file)
         else:

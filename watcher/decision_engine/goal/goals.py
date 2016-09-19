@@ -84,11 +84,11 @@ class ServerConsolidation(base.Goal):
 
     @classmethod
     def get_display_name(cls):
-        return _("Server consolidation")
+        return _("Server Consolidation")
 
     @classmethod
     def get_translatable_display_name(cls):
-        return "Server consolidation"
+        return "Server Consolidation"
 
     @classmethod
     def get_efficacy_specification(cls):
@@ -108,11 +108,11 @@ class ThermalOptimization(base.Goal):
 
     @classmethod
     def get_display_name(cls):
-        return _("Thermal optimization")
+        return _("Thermal Optimization")
 
     @classmethod
     def get_translatable_display_name(cls):
-        return "Thermal optimization"
+        return "Thermal Optimization"
 
     @classmethod
     def get_efficacy_specification(cls):
@@ -132,11 +132,11 @@ class WorkloadBalancing(base.Goal):
 
     @classmethod
     def get_display_name(cls):
-        return _("Workload balancing")
+        return _("Workload Balancing")
 
     @classmethod
     def get_translatable_display_name(cls):
-        return "Workload balancing"
+        return "Workload Balancing"
 
     @classmethod
     def get_efficacy_specification(cls):
@@ -145,6 +145,10 @@ class WorkloadBalancing(base.Goal):
 
 
 class AirflowOptimization(base.Goal):
+    """AirflowOptimization
+
+    This goal is used to optimize the airflow within a cloud infrastructure.
+    """
 
     @classmethod
     def get_name(cls):
@@ -152,11 +156,11 @@ class AirflowOptimization(base.Goal):
 
     @classmethod
     def get_display_name(cls):
-        return _("Airflow optimization")
+        return _("Airflow Optimization")
 
     @classmethod
     def get_translatable_display_name(cls):
-        return "Airflow optimization"
+        return "Airflow Optimization"
 
     @classmethod
     def get_efficacy_specification(cls):

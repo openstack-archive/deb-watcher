@@ -19,6 +19,7 @@
 
 import mock
 
+from watcher.common import utils
 from watcher.decision_engine.model import model_root
 from watcher.decision_engine.strategy import strategies
 from watcher.tests import base
@@ -28,7 +29,7 @@ from watcher.tests.decision_engine.strategy.strategies \
     import faker_metrics_collector
 
 
-class TestWorkloadStabilization(base.BaseTestCase):
+class TestWorkloadStabilization(base.TestCase):
 
     def setUp(self):
         super(TestWorkloadStabilization, self).setUp()
@@ -47,7 +48,7 @@ class TestWorkloadStabilization(base.BaseTestCase):
             'Node_4': {'cpu_util': 0.02, 'memory.resident': 4, 'vcpus': 40}}
 
         p_model = mock.patch.object(
-            strategies.WorkloadStabilization, "model",
+            strategies.WorkloadStabilization, "compute_model",
             new_callable=mock.PropertyMock)
         self.m_model = p_model.start()
         self.addCleanup(p_model.stop)
@@ -62,12 +63,34 @@ class TestWorkloadStabilization(base.BaseTestCase):
         self.m_ceilometer.return_value = mock.Mock(
             statistic_aggregation=self.fake_metrics.mock_get_statistics)
         self.strategy = strategies.WorkloadStabilization(config=mock.Mock())
+        self.strategy.input_parameters = utils.Struct()
+        self.strategy.input_parameters.update(
+            {'metrics': ["cpu_util", "memory.resident"],
+             'thresholds': {"cpu_util": 0.2, "memory.resident": 0.2},
+             'weights': {"cpu_util_weight": 1.0,
+                         "memory.resident_weight": 1.0},
+             'instance_metrics':
+                 {"cpu_util": "hardware.cpu.util",
+                  "memory.resident": "hardware.memory.used"},
+             'host_choice': 'retry',
+             'retry_count': 1})
+        self.strategy.metrics = ["cpu_util", "memory.resident"]
+        self.strategy.thresholds = {"cpu_util": 0.2, "memory.resident": 0.2}
+        self.strategy.weights = {"cpu_util_weight": 1.0,
+                                 "memory.resident_weight": 1.0}
+        self.strategy.instance_metrics = {"cpu_util": "hardware.cpu.util",
+                                          "memory.resident":
+                                              "hardware.memory.used"}
+        self.strategy.host_choice = 'retry'
+        self.strategy.retry_count = 1
 
-    def test_get_vm_load(self):
+    def test_get_instance_load(self):
         self.m_model.return_value = self.fake_cluster.generate_scenario_1()
-        vm_0_dict = {'uuid': 'VM_0', 'vcpus': 10,
-                     'cpu_util': 7, 'memory.resident': 2}
-        self.assertEqual(vm_0_dict, self.strategy.get_vm_load("VM_0"))
+        instance_0_dict = {
+            'uuid': 'INSTANCE_0', 'vcpus': 10,
+            'cpu_util': 7, 'memory.resident': 2}
+        self.assertEqual(
+            instance_0_dict, self.strategy.get_instance_load("INSTANCE_0"))
 
     def test_normalize_hosts_load(self):
         self.m_model.return_value = self.fake_cluster.generate_scenario_1()
@@ -109,7 +132,7 @@ class TestWorkloadStabilization(base.BaseTestCase):
         self.m_model.return_value = self.fake_cluster.generate_scenario_1()
         self.assertEqual(
             self.strategy.calculate_migration_case(
-                self.hosts_load_assert, "VM_5",
+                self.hosts_load_assert, "INSTANCE_5",
                 "Node_2", "Node_1")[-1]["Node_1"],
             {'cpu_util': 2.55, 'memory.resident': 21, 'vcpus': 40})
 
@@ -131,23 +154,28 @@ class TestWorkloadStabilization(base.BaseTestCase):
         self.m_model.return_value = self.fake_cluster.generate_scenario_1()
         self.strategy.thresholds = {'cpu_util': 0.001, 'memory.resident': 0.2}
         self.strategy.simulate_migrations = mock.Mock(
-            return_value=[{'vm': 'VM_4', 's_host': 'Node_2', 'host': 'Node_1'}]
+            return_value=[
+                {'instance': 'INSTANCE_4', 's_host': 'Node_2',
+                 'host': 'Node_1'}]
         )
         with mock.patch.object(self.strategy, 'migrate') as mock_migration:
-            self.strategy.execute()
+            self.strategy.do_execute()
             mock_migration.assert_called_once_with(
-                'VM_4', 'Node_2', 'Node_1')
+                'INSTANCE_4', 'Node_2', 'Node_1')
 
     def test_execute_multiply_migrations(self):
         self.m_model.return_value = self.fake_cluster.generate_scenario_1()
         self.strategy.thresholds = {'cpu_util': 0.00001,
                                     'memory.resident': 0.0001}
         self.strategy.simulate_migrations = mock.Mock(
-            return_value=[{'vm': 'VM_4', 's_host': 'Node_2', 'host': 'Node_1'},
-                          {'vm': 'VM_3', 's_host': 'Node_2', 'host': 'Node_3'}]
+            return_value=[
+                {'instance': 'INSTANCE_4', 's_host': 'Node_2',
+                 'host': 'Node_1'},
+                {'instance': 'INSTANCE_3', 's_host': 'Node_2',
+                 'host': 'Node_3'}]
         )
         with mock.patch.object(self.strategy, 'migrate') as mock_migrate:
-            self.strategy.execute()
+            self.strategy.do_execute()
             self.assertEqual(mock_migrate.call_count, 1)
 
     def test_execute_nothing_to_migrate(self):

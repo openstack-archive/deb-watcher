@@ -13,8 +13,12 @@
 # implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from oslo_log import log
+
 import threading
+
+from oslo_log import log
+
+from watcher._i18n import _LW
 
 LOG = log.getLogger(__name__)
 
@@ -22,110 +26,86 @@ LOG = log.getLogger(__name__)
 class Mapping(object):
     def __init__(self, model):
         self.model = model
-        self._mapping_hypervisors = {}
-        self.mapping_vm = {}
+        self.compute_node_mapping = {}
+        self.instance_mapping = {}
         self.lock = threading.Lock()
 
-    def map(self, hypervisor, vm):
-        """Select the hypervisor where the instance are launched
+    def map(self, node, instance):
+        """Select the node where the instance is launched
 
-        :param hypervisor: the hypervisor
-        :param vm: the virtual machine or instance
+        :param node: the node
+        :param instance: the virtual machine or instance
         """
-
         try:
             self.lock.acquire()
 
             # init first
-            if hypervisor.uuid not in self._mapping_hypervisors.keys():
-                self._mapping_hypervisors[hypervisor.uuid] = []
+            if node.uuid not in self.compute_node_mapping.keys():
+                self.compute_node_mapping[node.uuid] = set()
 
-            # map node => vms
-            self._mapping_hypervisors[hypervisor.uuid].append(
-                vm.uuid)
+            # map node => instances
+            self.compute_node_mapping[node.uuid].add(instance.uuid)
 
-            # map vm => node
-            self.mapping_vm[vm.uuid] = hypervisor.uuid
+            # map instance => node
+            self.instance_mapping[instance.uuid] = node.uuid
 
         finally:
             self.lock.release()
 
-    def unmap(self, hypervisor, vm):
-        """Remove the instance from the hypervisor
+    def unmap(self, node, instance):
+        """Remove the instance from the node
 
-        :param hypervisor: the hypervisor
-        :param vm: the virtual machine or instance
+        :param node: the node
+        :param instance: the virtual machine or instance
         """
+        self.unmap_by_uuid(node.uuid, instance.uuid)
 
-        self.unmap_from_id(hypervisor.uuid, vm.uuid)
-
-    def unmap_from_id(self, node_uuid, vm_uuid):
-        """Remove the instance (by id) from the hypervisor (by id)
+    def unmap_by_uuid(self, node_uuid, instance_uuid):
+        """Remove the instance (by id) from the node (by id)
 
         :rtype : object
         """
-
         try:
             self.lock.acquire()
-            if str(node_uuid) in self._mapping_hypervisors:
-                self._mapping_hypervisors[str(node_uuid)].remove(str(vm_uuid))
-                # remove vm
-                self.mapping_vm.pop(vm_uuid)
+            if str(node_uuid) in self.compute_node_mapping:
+                self.compute_node_mapping[str(node_uuid)].remove(
+                    str(instance_uuid))
+                # remove instance
+                self.instance_mapping.pop(instance_uuid)
             else:
                 LOG.warning(
-                    "trying to delete the virtual machine {0}  but it was not "
-                    "found on hypervisor {1}".format(
-                        vm_uuid, node_uuid))
+                    _LW("Trying to delete the instance %(instance)s but it "
+                        "was not found on node %(node)s") %
+                    {'instance': instance_uuid, 'node': node_uuid})
         finally:
             self.lock.release()
 
     def get_mapping(self):
-        return self._mapping_hypervisors
+        return self.compute_node_mapping
 
-    def get_mapping_vm(self):
-        return self.mapping_vm
+    def get_node_from_instance(self, instance):
+        return self.get_node_by_instance_uuid(instance.uuid)
 
-    def get_node_from_vm(self, vm):
-        return self.get_node_from_vm_id(vm.uuid)
+    def get_node_by_instance_uuid(self, instance_uuid):
+        """Getting host information from the guest instance
 
-    def get_node_from_vm_id(self, vm_uuid):
-        """Getting host information from the guest VM
-
-        :param vm: the uuid of the instance
-        :return: hypervisor
+        :param instance: the uuid of the instance
+        :return: node
         """
+        return self.model.get_node_by_uuid(
+            self.instance_mapping[str(instance_uuid)])
 
-        return self.model.get_hypervisor_from_id(
-            self.get_mapping_vm()[str(vm_uuid)])
+    def get_node_instances(self, node):
+        """Get the list of instances running on the node
 
-    def get_node_vms(self, hypervisor):
-        """Get the list of instances running on the hypervisor
-
-        :param hypervisor:
+        :param node:
         :return:
         """
-        return self.get_node_vms_from_id(hypervisor.uuid)
+        return self.get_node_instances_by_uuid(node.uuid)
 
-    def get_node_vms_from_id(self, node_uuid):
-        if str(node_uuid) in self._mapping_hypervisors.keys():
-            return self._mapping_hypervisors[str(node_uuid)]
+    def get_node_instances_by_uuid(self, node_uuid):
+        if str(node_uuid) in self.compute_node_mapping.keys():
+            return self.compute_node_mapping[str(node_uuid)]
         else:
             # empty
-            return []
-
-    def migrate_vm(self, vm, src_hypervisor, dest_hypervisor):
-        """Migrate single instance from src_hypervisor to dest_hypervisor
-
-        :param vm:
-        :param src_hypervisor:
-        :param dest_hypervisor:
-        :return:
-        """
-
-        if src_hypervisor == dest_hypervisor:
-            return False
-        # unmap
-        self.unmap(src_hypervisor, vm)
-        # map
-        self.map(dest_hypervisor, vm)
-        return True
+            return set()

@@ -18,13 +18,10 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import mock
-from oslo_config import cfg
 
 from watcher.common import ceilometer_helper
 from watcher.common import clients
 from watcher.tests import base
-
-CONF = cfg.CONF
 
 
 @mock.patch.object(clients.OpenStackClients, 'ceilometer')
@@ -56,7 +53,7 @@ class TestCeilometerHelper(base.BaseTestCase):
         mock_ceilometer.return_value = ceilometer
         cm = ceilometer_helper.CeilometerHelper()
         val = cm.statistic_aggregation(
-            resource_id="VM_ID",
+            resource_id="INSTANCE_ID",
             meter_name="cpu_util",
             period="7300"
         )

@@ -20,10 +20,9 @@ from oslo_log import log
 
 from watcher._i18n import _, _LE, _LI, _LW
 from watcher.common import exception as wexc
-from watcher.decision_engine.model import resource
-from watcher.decision_engine.model import vm_state
+from watcher.decision_engine.cluster.history import ceilometer as ceil
+from watcher.decision_engine.model import element
 from watcher.decision_engine.strategy.strategies import base
-from watcher.metrics_engine.cluster_history import ceilometer as ceil
 
 LOG = log.getLogger(__name__)
 
@@ -33,13 +32,13 @@ class UniformAirflow(base.BaseStrategy):
 
     *Description*
 
-        It is a migration strategy based on the Airflow of physical
-        servers. It generates solutions to move vm whenever a server's
-        Airflow is higher than the specified threshold.
+        It is a migration strategy based on the airflow of physical
+        servers. It generates solutions to move VM whenever a server's
+        airflow is higher than the specified threshold.
 
     *Requirements*
 
-        * Hardware: compute node with NodeManager3.0 support
+        * Hardware: compute node with NodeManager 3.0 support
         * Software: Ceilometer component ceilometer-agent-compute running
           in each compute node, and Ceilometer API can report such telemetry
           "airflow, system power, inlet temperature" successfully.
@@ -47,12 +46,11 @@ class UniformAirflow(base.BaseStrategy):
 
     *Limitations*
 
-       - This is a proof of concept that is not meant to be used in production
+       - This is a proof of concept that is not meant to be used in production.
        - We cannot forecast how many servers should be migrated. This is the
          reason why we only plan a single virtual machine migration at a time.
          So it's better to use this algorithm with `CONTINUOUS` audits.
-       - It assume that live migrations are possible
-
+       - It assumes that live migrations are possible.
     """
 
     # The meter to report Airflow of physical server in ceilometer
@@ -61,15 +59,7 @@ class UniformAirflow(base.BaseStrategy):
     METER_NAME_INLET_T = "hardware.ipmi.node.temperature"
     # The meter to report system power of physical server in ceilometer
     METER_NAME_POWER = "hardware.ipmi.node.power"
-    # TODO(Junjie): make below thresholds configurable
-    # Unit: 0.1 CFM
-    THRESHOLD_AIRFLOW = 400.0
-    # Unit: degree C
-    THRESHOLD_INLET_T = 28.0
-    # Unit: watts
-    THRESHOLD_POWER = 350.0
     # choose 300 seconds as the default duration of meter aggregation
-    # TODO(Junjie): make it configurable
     PERIOD = 300
 
     MIGRATION = "migrate"
@@ -82,12 +72,8 @@ class UniformAirflow(base.BaseStrategy):
         :param osc: an OpenStackClients object
         """
         super(UniformAirflow, self).__init__(config, osc)
-        # The migration plan will be triggered when the Ariflow reaches
+        # The migration plan will be triggered when the airflow reaches
         # threshold
-        # TODO(Junjie): Threshold should be configurable for each audit
-        self.threshold_airflow = self.THRESHOLD_AIRFLOW
-        self.threshold_inlet_t = self.THRESHOLD_INLET_T
-        self.threshold_power = self.THRESHOLD_POWER
         self.meter_name_airflow = self.METER_NAME_AIRFLOW
         self.meter_name_inlet_t = self.METER_NAME_INLET_T
         self.meter_name_power = self.METER_NAME_POWER
@@ -110,145 +96,178 @@ class UniformAirflow(base.BaseStrategy):
 
     @classmethod
     def get_display_name(cls):
-        return _("uniform airflow migration strategy")
+        return _("Uniform airflow migration strategy")
 
     @classmethod
     def get_translatable_display_name(cls):
-        return "uniform airflow migration strategy"
+        return "Uniform airflow migration strategy"
 
     @classmethod
     def get_goal_name(cls):
         return "airflow_optimization"
 
     @classmethod
-    def get_goal_display_name(cls):
-        return _("AIRFLOW optimization")
+    def get_schema(cls):
+        # Mandatory default setting for each element
+        return {
+            "properties": {
+                "threshold_airflow": {
+                    "description": ("airflow threshold for migration, Unit is "
+                                    "0.1CFM"),
+                    "type": "number",
+                    "default": 400.0
+                },
+                "threshold_inlet_t": {
+                    "description": ("inlet temperature threshold for "
+                                    "migration decision"),
+                    "type": "number",
+                    "default": 28.0
+                },
+                "threshold_power": {
+                    "description": ("system power threshold for migration "
+                                    "decision"),
+                    "type": "number",
+                    "default": 350.0
+                },
+                "period": {
+                    "description": "aggregate time period of ceilometer",
+                    "type": "number",
+                    "default": 300
+                },
+            },
+        }
 
-    @classmethod
-    def get_translatable_goal_display_name(cls):
-        return "Airflow optimization"
-
-    def calculate_used_resource(self, hypervisor, cap_cores, cap_mem,
-                                cap_disk):
-        '''calculate the used vcpus, memory and disk based on VM flavors'''
-        vms = self.model.get_mapping().get_node_vms(hypervisor)
+    def calculate_used_resource(self, node, cap_cores, cap_mem, cap_disk):
+        """Compute the used vcpus, memory and disk based on instance flavors"""
+        instances = self.compute_model.mapping.get_node_instances(node)
         vcpus_used = 0
         memory_mb_used = 0
         disk_gb_used = 0
-        for vm_id in vms:
-            vm = self.model.get_vm_from_id(vm_id)
-            vcpus_used += cap_cores.get_capacity(vm)
-            memory_mb_used += cap_mem.get_capacity(vm)
-            disk_gb_used += cap_disk.get_capacity(vm)
+        for instance_id in instances:
+            instance = self.compute_model.get_instance_by_uuid(
+                instance_id)
+            vcpus_used += cap_cores.get_capacity(instance)
+            memory_mb_used += cap_mem.get_capacity(instance)
+            disk_gb_used += cap_disk.get_capacity(instance)
 
         return vcpus_used, memory_mb_used, disk_gb_used
 
-    def choose_vm_to_migrate(self, hosts):
-        """pick up an active vm instance to migrate from provided hosts
+    def choose_instance_to_migrate(self, hosts):
+        """Pick up an active instance instance to migrate from provided hosts
 
-        :param hosts: the array of dict which contains hypervisor object
+        :param hosts: the array of dict which contains node object
         """
-        vms_tobe_migrate = []
-        for hvmap in hosts:
-            source_hypervisor = hvmap['hv']
-            source_vms = self.model.get_mapping().get_node_vms(
-                source_hypervisor)
-            if source_vms:
+        instances_tobe_migrate = []
+        for nodemap in hosts:
+            source_node = nodemap['node']
+            source_instances = self.compute_model.mapping.get_node_instances(
+                source_node)
+            if source_instances:
                 inlet_t = self.ceilometer.statistic_aggregation(
-                    resource_id=source_hypervisor.uuid,
+                    resource_id=source_node.uuid,
                     meter_name=self.meter_name_inlet_t,
                     period=self._period,
                     aggregate='avg')
                 power = self.ceilometer.statistic_aggregation(
-                    resource_id=source_hypervisor.uuid,
+                    resource_id=source_node.uuid,
                     meter_name=self.meter_name_power,
                     period=self._period,
                     aggregate='avg')
                 if (power < self.threshold_power and
                         inlet_t < self.threshold_inlet_t):
-                    # hardware issue, migrate all vms from this hypervisor
-                    for vm_id in source_vms:
+                    # hardware issue, migrate all instances from this node
+                    for instance_id in source_instances:
                         try:
-                            vm = self.model.get_vm_from_id(vm_id)
-                            vms_tobe_migrate.append(vm)
+                            instance = (self.compute_model.
+                                        get_instance_by_uuid(instance_id))
+                            instances_tobe_migrate.append(instance)
                         except wexc.InstanceNotFound:
-                            LOG.error(_LE("VM not found Error: %s"), vm_id)
-                    return source_hypervisor, vms_tobe_migrate
+                            LOG.error(_LE("Instance not found; error: %s"),
+                                      instance_id)
+                    return source_node, instances_tobe_migrate
                 else:
-                    # migrate the first active vm
-                    for vm_id in source_vms:
+                    # migrate the first active instance
+                    for instance_id in source_instances:
                         try:
-                            vm = self.model.get_vm_from_id(vm_id)
-                            if vm.state != vm_state.VMState.ACTIVE.value:
-                                LOG.info(_LE("VM not active, skipped: %s"),
-                                         vm.uuid)
+                            instance = (self.compute_model.
+                                        get_instance_by_uuid(instance_id))
+                            if (instance.state !=
+                                    element.InstanceState.ACTIVE.value):
+                                LOG.info(
+                                    _LI("Instance not active, skipped: %s"),
+                                    instance.uuid)
                                 continue
-                            vms_tobe_migrate.append(vm)
-                            return source_hypervisor, vms_tobe_migrate
+                            instances_tobe_migrate.append(instance)
+                            return source_node, instances_tobe_migrate
                         except wexc.InstanceNotFound:
-                            LOG.error(_LE("VM not found Error: %s"), vm_id)
+                            LOG.error(_LE("Instance not found; error: %s"),
+                                      instance_id)
             else:
-                LOG.info(_LI("VM not found from hypervisor: %s"),
-                         source_hypervisor.uuid)
+                LOG.info(_LI("Instance not found on node: %s"),
+                         source_node.uuid)
 
-    def filter_destination_hosts(self, hosts, vms_to_migrate):
-        '''return vm and host with sufficient available resources'''
+    def filter_destination_hosts(self, hosts, instances_to_migrate):
+        """Find instance and host with sufficient available resources"""
 
-        cap_cores = self.model.get_resource_from_id(
-            resource.ResourceType.cpu_cores)
-        cap_disk = self.model.get_resource_from_id(resource.ResourceType.disk)
-        cap_mem = self.model.get_resource_from_id(
-            resource.ResourceType.memory)
-        # large vm go first
-        vms_to_migrate = sorted(vms_to_migrate, reverse=True,
-                                key=lambda x: (cap_cores.get_capacity(x)))
-        # find hosts for VMs
+        cap_cores = self.compute_model.get_resource_by_uuid(
+            element.ResourceType.cpu_cores)
+        cap_disk = self.compute_model.get_resource_by_uuid(
+            element.ResourceType.disk)
+        cap_mem = self.compute_model.get_resource_by_uuid(
+            element.ResourceType.memory)
+        # large instance go first
+        instances_to_migrate = sorted(
+            instances_to_migrate, reverse=True,
+            key=lambda x: (cap_cores.get_capacity(x)))
+        # find hosts for instances
         destination_hosts = []
-        for vm_to_migrate in vms_to_migrate:
-            required_cores = cap_cores.get_capacity(vm_to_migrate)
-            required_disk = cap_disk.get_capacity(vm_to_migrate)
-            required_mem = cap_mem.get_capacity(vm_to_migrate)
+        for instance_to_migrate in instances_to_migrate:
+            required_cores = cap_cores.get_capacity(instance_to_migrate)
+            required_disk = cap_disk.get_capacity(instance_to_migrate)
+            required_mem = cap_mem.get_capacity(instance_to_migrate)
             dest_migrate_info = {}
-            for hvmap in hosts:
-                host = hvmap['hv']
-                if 'cores_used' not in hvmap:
+            for nodemap in hosts:
+                host = nodemap['node']
+                if 'cores_used' not in nodemap:
                     # calculate the available resources
-                    hvmap['cores_used'], hvmap['mem_used'],\
-                        hvmap['disk_used'] = self.calculate_used_resource(
+                    nodemap['cores_used'], nodemap['mem_used'],\
+                        nodemap['disk_used'] = self.calculate_used_resource(
                             host, cap_cores, cap_mem, cap_disk)
                 cores_available = (cap_cores.get_capacity(host) -
-                                   hvmap['cores_used'])
+                                   nodemap['cores_used'])
                 disk_available = (cap_disk.get_capacity(host) -
-                                  hvmap['disk_used'])
-                mem_available = cap_mem.get_capacity(host) - hvmap['mem_used']
+                                  nodemap['disk_used'])
+                mem_available = (
+                    cap_mem.get_capacity(host) - nodemap['mem_used'])
                 if (cores_available >= required_cores and
                         disk_available >= required_disk and
                         mem_available >= required_mem):
-                    dest_migrate_info['vm'] = vm_to_migrate
-                    dest_migrate_info['hv'] = host
-                    hvmap['cores_used'] += required_cores
-                    hvmap['mem_used'] += required_mem
-                    hvmap['disk_used'] += required_disk
+                    dest_migrate_info['instance'] = instance_to_migrate
+                    dest_migrate_info['node'] = host
+                    nodemap['cores_used'] += required_cores
+                    nodemap['mem_used'] += required_mem
+                    nodemap['disk_used'] += required_disk
                     destination_hosts.append(dest_migrate_info)
                     break
-        # check if all vms have target hosts
-        if len(destination_hosts) != len(vms_to_migrate):
-            LOG.warning(_LW("Not all target hosts could be found, it might "
-                            "be because of there's no enough resource"))
+        # check if all instances have target hosts
+        if len(destination_hosts) != len(instances_to_migrate):
+            LOG.warning(_LW("Not all target hosts could be found; it might "
+                            "be because there is not enough resource"))
             return None
         return destination_hosts
 
     def group_hosts_by_airflow(self):
         """Group hosts based on airflow meters"""
 
-        hypervisors = self.model.get_all_hypervisors()
-        if not hypervisors:
+        nodes = self.compute_model.get_all_compute_nodes()
+        if not nodes:
             raise wexc.ClusterEmpty()
         overload_hosts = []
         nonoverload_hosts = []
-        for hypervisor_id in hypervisors:
-            hypervisor = self.model.get_hypervisor_from_id(hypervisor_id)
-            resource_id = hypervisor.uuid
+        for node_id in nodes:
+            node = self.compute_model.get_node_by_uuid(
+                node_id)
+            resource_id = node.uuid
             airflow = self.ceilometer.statistic_aggregation(
                 resource_id=resource_id,
                 meter_name=self.meter_name_airflow,
@@ -256,71 +275,77 @@ class UniformAirflow(base.BaseStrategy):
                 aggregate='avg')
             # some hosts may not have airflow meter, remove from target
             if airflow is None:
-                LOG.warning(_LE("%s: no airflow data"), resource_id)
+                LOG.warning(_LW("%s: no airflow data"), resource_id)
                 continue
 
             LOG.debug("%s: airflow %f" % (resource_id, airflow))
-            hvmap = {'hv': hypervisor, 'airflow': airflow}
+            nodemap = {'node': node, 'airflow': airflow}
             if airflow >= self.threshold_airflow:
-                # mark the hypervisor to release resources
-                overload_hosts.append(hvmap)
+                # mark the node to release resources
+                overload_hosts.append(nodemap)
             else:
-                nonoverload_hosts.append(hvmap)
+                nonoverload_hosts.append(nodemap)
         return overload_hosts, nonoverload_hosts
 
     def pre_execute(self):
         LOG.debug("Initializing Uniform Airflow Strategy")
 
-        if self.model is None:
+        if not self.compute_model:
             raise wexc.ClusterStateNotDefined()
 
-    def do_execute(self):
-        src_hypervisors, target_hypervisors = (
-            self.group_hosts_by_airflow())
+        LOG.debug(self.compute_model.to_string())
 
-        if not src_hypervisors:
+    def do_execute(self):
+        self.threshold_airflow = self.input_parameters.threshold_airflow
+        self.threshold_inlet_t = self.input_parameters.threshold_inlet_t
+        self.threshold_power = self.input_parameters.threshold_power
+        self._period = self.input_parameters.period
+        source_nodes, target_nodes = self.group_hosts_by_airflow()
+
+        if not source_nodes:
             LOG.debug("No hosts require optimization")
             return self.solution
 
-        if not target_hypervisors:
-            LOG.warning(_LW("No hosts current have airflow under %s "
-                            ", therefore there are no possible target "
+        if not target_nodes:
+            LOG.warning(_LW("No hosts currently have airflow under %s, "
+                            "therefore there are no possible target "
                             "hosts for any migration"),
                         self.threshold_airflow)
             return self.solution
 
-        # migrate the vm from server with largest airflow first
-        src_hypervisors = sorted(src_hypervisors,
-                                 reverse=True,
-                                 key=lambda x: (x["airflow"]))
-        vms_to_migrate = self.choose_vm_to_migrate(src_hypervisors)
-        if not vms_to_migrate:
+        # migrate the instance from server with largest airflow first
+        source_nodes = sorted(source_nodes,
+                              reverse=True,
+                              key=lambda x: (x["airflow"]))
+        instances_to_migrate = self.choose_instance_to_migrate(source_nodes)
+        if not instances_to_migrate:
             return self.solution
-        source_hypervisor, vms_src = vms_to_migrate
+        source_node, instances_src = instances_to_migrate
         # sort host with airflow
-        target_hypervisors = sorted(target_hypervisors,
-                                    key=lambda x: (x["airflow"]))
-        # find the hosts that have enough resource for the VM to be migrated
-        destination_hosts = self.filter_destination_hosts(target_hypervisors,
-                                                          vms_src)
+        target_nodes = sorted(target_nodes, key=lambda x: (x["airflow"]))
+        # find the hosts that have enough resource
+        # for the instance to be migrated
+        destination_hosts = self.filter_destination_hosts(
+            target_nodes, instances_src)
         if not destination_hosts:
-            LOG.warning(_LW("No proper target host could be found, it might "
-                            "be because of there's no enough resource"))
+            LOG.warning(_LW("No target host could be found; it might "
+                            "be because there is not enough resources"))
             return self.solution
-        # generate solution to migrate the vm to the dest server,
+        # generate solution to migrate the instance to the dest server,
         for info in destination_hosts:
-            vm_src = info['vm']
-            mig_dst_hypervisor = info['hv']
-            if self.model.get_mapping().migrate_vm(vm_src,
-                                                   source_hypervisor,
-                                                   mig_dst_hypervisor):
+            instance = info['instance']
+            destination_node = info['node']
+            if self.compute_model.migrate_instance(
+                    instance, source_node, destination_node):
                 parameters = {'migration_type': 'live',
-                              'src_hypervisor': source_hypervisor.uuid,
-                              'dst_hypervisor': mig_dst_hypervisor.uuid}
+                              'source_node': source_node.uuid,
+                              'destination_node': destination_node.uuid}
                 self.solution.add_action(action_type=self.MIGRATION,
-                                         resource_id=vm_src.uuid,
+                                         resource_id=instance.uuid,
                                          input_parameters=parameters)
 
     def post_execute(self):
-        self.solution.model = self.model
+        self.solution.model = self.compute_model
         # TODO(v-francoise): Add the indicators to the solution
+
+        LOG.debug(self.compute_model.to_string())

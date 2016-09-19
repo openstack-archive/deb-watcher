@@ -86,15 +86,16 @@ class WatcherException(Exception):
         if not message:
             try:
                 message = self.msg_fmt % kwargs
-            except Exception as e:
+            except Exception:
                 # kwargs doesn't match a variable in msg_fmt
                 # log the issue and the kwargs
                 LOG.exception(_LE('Exception in string format operation'))
                 for name, value in kwargs.items():
-                    LOG.error("%s: %s", name, value)
+                    LOG.error(_LE("%(name)s: %(value)s"),
+                              {'name': name, 'value': value})
 
                 if CONF.fatal_exception_format_errors:
-                    raise e
+                    raise
                 else:
                     # at least get the core msg_fmt out if something happened
                     message = self.msg_fmt
@@ -104,12 +105,12 @@ class WatcherException(Exception):
     def __str__(self):
         """Encode to utf-8 then wsme api can consume it as well"""
         if not six.PY3:
-            return unicode(self.args[0]).encode('utf-8')
+            return six.text_type(self.args[0]).encode('utf-8')
         else:
             return self.args[0]
 
     def __unicode__(self):
-        return unicode(self.args[0])
+        return six.text_type(self.args[0])
 
     def format_message(self):
         if self.__class__.__name__.endswith('_Remote'):
@@ -206,11 +207,15 @@ class AuditTemplateAlreadyExists(Conflict):
 
 class AuditTemplateReferenced(Invalid):
     msg_fmt = _("AuditTemplate %(audit_template)s is referenced by one or "
-                "multiple audit")
+                "multiple audits")
 
 
 class AuditTypeNotFound(Invalid):
     msg_fmt = _("Audit type %(audit_type)s could not be found")
+
+
+class AuditParameterNotAllowed(Invalid):
+    msg_fmt = _("Audit parameter %(parameter)s are not allowed")
 
 
 class AuditNotFound(ResourceNotFound):
@@ -273,6 +278,14 @@ class EfficacyIndicatorAlreadyExists(Conflict):
     msg_fmt = _("An action with UUID %(uuid)s already exists")
 
 
+class ScoringEngineAlreadyExists(Conflict):
+    msg_fmt = _("A scoring engine with UUID %(uuid)s already exists")
+
+
+class ScoringEngineNotFound(ResourceNotFound):
+    msg_fmt = _("ScoringEngine %(scoring_engine)s could not be found")
+
+
 class HTTPNotFound(ResourceNotFound):
     pass
 
@@ -304,19 +317,27 @@ class AuthorizationFailure(WatcherException):
 
 
 class KeystoneFailure(WatcherException):
-    msg_fmt = _("'Keystone API endpoint is missing''")
+    msg_fmt = _("Keystone API endpoint is missing")
 
 
 class ClusterEmpty(WatcherException):
-    msg_fmt = _("The list of hypervisor(s) in the cluster is empty")
+    msg_fmt = _("The list of compute node(s) in the cluster is empty")
 
 
 class MetricCollectorNotDefined(WatcherException):
     msg_fmt = _("The metrics resource collector is not defined")
 
 
+class ClusterDataModelCollectionError(WatcherException):
+    msg_fmt = _("The cluster data model '%(cdm)s' could not be built")
+
+
 class ClusterStateNotDefined(WatcherException):
     msg_fmt = _("The cluster state is not defined")
+
+
+class CapacityNotDefined(WatcherException):
+    msg_fmt = _("The capacity %(capacity)s is not defined for '%(resource)s'")
 
 
 class NoAvailableStrategyForGoal(WatcherException):
@@ -333,7 +354,7 @@ class GlobalEfficacyComputationError(WatcherException):
                 "goal using the '%(strategy)s' strategy.")
 
 
-class NoMetricValuesForVM(WatcherException):
+class NoMetricValuesForInstance(WatcherException):
     msg_fmt = _("No values returned by %(resource_id)s for %(metric_name)s.")
 
 
@@ -344,11 +365,11 @@ class NoSuchMetricForHost(WatcherException):
 # Model
 
 class InstanceNotFound(WatcherException):
-    msg_fmt = _("The instance '%(name)s' is not found")
+    msg_fmt = _("The instance '%(name)s' could not be found")
 
 
-class HypervisorNotFound(WatcherException):
-    msg_fmt = _("The hypervisor is not found")
+class ComputeNodeNotFound(WatcherException):
+    msg_fmt = _("The compute node %(name)s could not be found")
 
 
 class LoadingError(WatcherException):

@@ -44,12 +44,12 @@ class Migrate(base.BaseAction):
         schema = Schema({
          'resource_id': str,  # should be a UUID
          'migration_type': str,  # choices -> "live", "cold"
-         'dst_hypervisor': str,
-         'src_hypervisor': str,
+         'destination_node': str,
+         'source_node': str,
         })
 
     The `resource_id` is the UUID of the server to migrate.
-    The `src_hypervisor` and `dst_hypervisor` parameters are respectively the
+    The `source_node` and `destination_node` parameters are respectively the
     source and the destination compute hostname (list of available compute
     hosts is returned by this command: ``nova service-list --binary
     nova-compute``).
@@ -59,28 +59,28 @@ class Migrate(base.BaseAction):
     MIGRATION_TYPE = 'migration_type'
     LIVE_MIGRATION = 'live'
     COLD_MIGRATION = 'cold'
-    DST_HYPERVISOR = 'dst_hypervisor'
-    SRC_HYPERVISOR = 'src_hypervisor'
+    DESTINATION_NODE = 'destination_node'
+    SOURCE_NODE = 'source_node'
 
     def check_resource_id(self, value):
         if (value is not None and
                 len(value) > 0 and not
                 utils.is_uuid_like(value)):
-            raise voluptuous.Invalid(_("The parameter"
-                                       " resource_id is invalid."))
+            raise voluptuous.Invalid(_("The parameter "
+                                       "resource_id is invalid."))
 
     @property
     def schema(self):
         return voluptuous.Schema({
             voluptuous.Required(self.RESOURCE_ID): self.check_resource_id,
-            voluptuous.Required(self.MIGRATION_TYPE,
-                                default=self.LIVE_MIGRATION):
-                                    voluptuous.Any(*[self.LIVE_MIGRATION,
-                                                     self.COLD_MIGRATION]),
-            voluptuous.Required(self.DST_HYPERVISOR):
+            voluptuous.Required(
+                self.MIGRATION_TYPE, default=self.LIVE_MIGRATION):
+                    voluptuous.Any(
+                        *[self.LIVE_MIGRATION, self.COLD_MIGRATION]),
+            voluptuous.Required(self.DESTINATION_NODE):
                 voluptuous.All(voluptuous.Any(*six.string_types),
                                voluptuous.Length(min=1)),
-            voluptuous.Required(self.SRC_HYPERVISOR):
+            voluptuous.Required(self.SOURCE_NODE):
                 voluptuous.All(voluptuous.Any(*six.string_types),
                                voluptuous.Length(min=1)),
         })
@@ -94,12 +94,12 @@ class Migrate(base.BaseAction):
         return self.input_parameters.get(self.MIGRATION_TYPE)
 
     @property
-    def dst_hypervisor(self):
-        return self.input_parameters.get(self.DST_HYPERVISOR)
+    def destination_node(self):
+        return self.input_parameters.get(self.DESTINATION_NODE)
 
     @property
-    def src_hypervisor(self):
-        return self.input_parameters.get(self.SRC_HYPERVISOR)
+    def source_node(self):
+        return self.input_parameters.get(self.SOURCE_NODE)
 
     def _live_migrate_instance(self, nova, destination):
         result = None
@@ -116,11 +116,11 @@ class Migrate(base.BaseAction):
                     dest_hostname=destination,
                     block_migration=True)
             else:
-                LOG.debug("Nova client exception occured while live migrating "
-                          "instance %s.Exception: %s" %
+                LOG.debug("Nova client exception occurred while live "
+                          "migrating instance %s.Exception: %s" %
                           (self.instance_uuid, e))
         except Exception:
-            LOG.critical(_LC("Unexpected error occured. Migration failed for"
+            LOG.critical(_LC("Unexpected error occurred. Migration failed for "
                              "instance %s. Leaving instance on previous "
                              "host."), self.instance_uuid)
 
@@ -134,7 +134,7 @@ class Migrate(base.BaseAction):
                 dest_hostname=destination)
         except Exception as exc:
             LOG.exception(exc)
-            LOG.critical(_LC("Unexpected error occured. Migration failed for"
+            LOG.critical(_LC("Unexpected error occurred. Migration failed for "
                              "instance %s. Leaving instance on previous "
                              "host."), self.instance_uuid)
 
@@ -152,23 +152,23 @@ class Migrate(base.BaseAction):
                 return self._cold_migrate_instance(nova, destination)
             else:
                 raise exception.Invalid(
-                    message=(_('Migration of type %(migration_type)s is not '
-                               'supported.') %
+                    message=(_("Migration of type '%(migration_type)s' is not "
+                               "supported.") %
                              {'migration_type': self.migration_type}))
         else:
             raise exception.InstanceNotFound(name=self.instance_uuid)
 
     def execute(self):
-        return self.migrate(destination=self.dst_hypervisor)
+        return self.migrate(destination=self.destination_node)
 
     def revert(self):
-        return self.migrate(destination=self.src_hypervisor)
+        return self.migrate(destination=self.source_node)
 
-    def precondition(self):
-        # todo(jed) check if the instance exist/ check if the instance is on
-        # the src_hypervisor
+    def pre_condition(self):
+        # TODO(jed): check if the instance exists / check if the instance is on
+        # the source_node
         pass
 
-    def postcondition(self):
-        # todo(jed) we can image to check extra parameters (nework reponse,ect)
+    def post_condition(self):
+        # TODO(jed): check extra parameters (network response, etc.)
         pass

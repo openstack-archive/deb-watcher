@@ -13,60 +13,147 @@
 # implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+import collections
+
+from lxml import etree
+import six
+
 from watcher._i18n import _
 from watcher.common import exception
-from watcher.decision_engine.model import hypervisor
+from watcher.common import utils
+from watcher.decision_engine.model import element
 from watcher.decision_engine.model import mapping
-from watcher.decision_engine.model import vm
 
 
 class ModelRoot(object):
-    def __init__(self):
-        self._hypervisors = {}
-        self._vms = {}
+    def __init__(self, stale=False):
+        self._nodes = utils.Struct()
+        self._instances = utils.Struct()
         self.mapping = mapping.Mapping(self)
-        self.resource = {}
+        self.resource = utils.Struct()
+        self.stale = stale
 
-    def assert_hypervisor(self, obj):
-        if not isinstance(obj, hypervisor.Hypervisor):
+    def __nonzero__(self):
+        return not self.stale
+
+    __bool__ = __nonzero__
+
+    def assert_node(self, obj):
+        if not isinstance(obj, element.ComputeNode):
             raise exception.IllegalArgumentException(
                 message=_("'obj' argument type is not valid"))
 
-    def assert_vm(self, obj):
-        if not isinstance(obj, vm.VM):
+    def assert_instance(self, obj):
+        if not isinstance(obj, element.Instance):
             raise exception.IllegalArgumentException(
                 message=_("'obj' argument type is not valid"))
 
-    def add_hypervisor(self, hypervisor):
-        self.assert_hypervisor(hypervisor)
-        self._hypervisors[hypervisor.uuid] = hypervisor
+    def add_node(self, node):
+        self.assert_node(node)
+        self._nodes[node.uuid] = node
 
-    def remove_hypervisor(self, hypervisor):
-        self.assert_hypervisor(hypervisor)
-        if str(hypervisor.uuid) not in self._hypervisors.keys():
-            raise exception.HypervisorNotFound(hypervisor.uuid)
+    def remove_node(self, node):
+        self.assert_node(node)
+        if str(node.uuid) not in self._nodes:
+            raise exception.ComputeNodeNotFound(name=node.uuid)
         else:
-            del self._hypervisors[hypervisor.uuid]
+            del self._nodes[node.uuid]
 
-    def add_vm(self, vm):
-        self.assert_vm(vm)
-        self._vms[vm.uuid] = vm
+    def add_instance(self, instance):
+        self.assert_instance(instance)
+        self._instances[instance.uuid] = instance
 
-    def get_all_hypervisors(self):
-        return self._hypervisors
+    def remove_instance(self, instance):
+        self.assert_instance(instance)
+        del self._instances[instance.uuid]
 
-    def get_hypervisor_from_id(self, hypervisor_uuid):
-        if str(hypervisor_uuid) not in self._hypervisors.keys():
-            raise exception.HypervisorNotFound(hypervisor_uuid)
-        return self._hypervisors[str(hypervisor_uuid)]
+    def map_instance(self, instance, node):
+        """Map a newly created instance to a node
 
-    def get_vm_from_id(self, uuid):
-        if str(uuid) not in self._vms.keys():
+        :param instance: :py:class:`~.Instance` object or instance UUID
+        :type instance: str or :py:class:`~.Instance`
+        :param node: :py:class:`~.ComputeNode` object or node UUID
+        :type node: str or :py:class:`~.Instance`
+        """
+        if isinstance(instance, six.string_types):
+            instance = self.get_instance_by_uuid(instance)
+        if isinstance(node, six.string_types):
+            node = self.get_node_by_uuid(node)
+
+        self.add_instance(instance)
+        self.mapping.map(node, instance)
+
+    def unmap_instance(self, instance, node):
+        """Unmap an instance from a node
+
+        :param instance: :py:class:`~.Instance` object or instance UUID
+        :type instance: str or :py:class:`~.Instance`
+        :param node: :py:class:`~.ComputeNode` object or node UUID
+        :type node: str or :py:class:`~.Instance`
+        """
+        if isinstance(instance, six.string_types):
+            instance = self.get_instance_by_uuid(instance)
+        if isinstance(node, six.string_types):
+            node = self.get_node_by_uuid(node)
+
+        self.add_instance(instance)
+        self.mapping.unmap(node, instance)
+
+    def delete_instance(self, instance, node=None):
+        if node is not None:
+            self.mapping.unmap(node, instance)
+
+        self.remove_instance(instance)
+
+        for resource in self.resource.values():
+            try:
+                resource.unset_capacity(instance)
+            except KeyError:
+                pass
+
+    def migrate_instance(self, instance, source_node, destination_node):
+        """Migrate single instance from source_node to destination_node
+
+        :param instance:
+        :param source_node:
+        :param destination_node:
+        :return:
+        """
+        if source_node == destination_node:
+            return False
+        # unmap
+        self.mapping.unmap(source_node, instance)
+        # map
+        self.mapping.map(destination_node, instance)
+        return True
+
+    def get_all_compute_nodes(self):
+        return self._nodes
+
+    def get_node_by_uuid(self, node_uuid):
+        if str(node_uuid) not in self._nodes:
+            raise exception.ComputeNodeNotFound(name=node_uuid)
+        return self._nodes[str(node_uuid)]
+
+    def get_instance_by_uuid(self, uuid):
+        if str(uuid) not in self._instances:
             raise exception.InstanceNotFound(name=uuid)
-        return self._vms[str(uuid)]
+        return self._instances[str(uuid)]
 
-    def get_all_vms(self):
-        return self._vms
+    def get_node_by_instance_uuid(self, instance_uuid):
+        """Getting host information from the guest instance
+
+        :param instance_uuid: the uuid of the instance
+        :return: node
+        """
+        if str(instance_uuid) not in self.mapping.instance_mapping:
+            raise exception.InstanceNotFound(name=instance_uuid)
+        return self.get_node_by_uuid(
+            self.mapping.instance_mapping[str(instance_uuid)])
+
+    def get_all_instances(self):
+        return self._instances
 
     def get_mapping(self):
         return self.mapping
@@ -74,5 +161,65 @@ class ModelRoot(object):
     def create_resource(self, r):
         self.resource[str(r.name)] = r
 
-    def get_resource_from_id(self, id):
-        return self.resource[str(id)]
+    def get_resource_by_uuid(self, resource_id):
+        return self.resource[str(resource_id)]
+
+    def get_node_instances(self, node):
+        return self.mapping.get_node_instances(node)
+
+    def _build_compute_node_element(self, compute_node):
+        attrib = collections.OrderedDict(
+            id=six.text_type(compute_node.id), uuid=compute_node.uuid,
+            human_id=compute_node.human_id, hostname=compute_node.hostname,
+            state=compute_node.state, status=compute_node.status)
+
+        for resource_name, resource in sorted(
+                self.resource.items(), key=lambda x: x[0]):
+            res_value = resource.get_capacity(compute_node)
+            if res_value is not None:
+                attrib[resource_name] = six.text_type(res_value)
+
+        compute_node_el = etree.Element("ComputeNode", attrib=attrib)
+
+        return compute_node_el
+
+    def _build_instance_element(self, instance):
+        attrib = collections.OrderedDict(
+            uuid=instance.uuid, human_id=instance.human_id,
+            hostname=instance.hostname, state=instance.state)
+
+        for resource_name, resource in sorted(
+                self.resource.items(), key=lambda x: x[0]):
+            res_value = resource.get_capacity(instance)
+            if res_value is not None:
+                attrib[resource_name] = six.text_type(res_value)
+
+        instance_el = etree.Element("Instance", attrib=attrib)
+
+        return instance_el
+
+    def to_string(self):
+        root = etree.Element("ModelRoot")
+        # Build compute node tree
+        for cn in sorted(self.get_all_compute_nodes().values(),
+                         key=lambda cn: cn.uuid):
+            compute_node_el = self._build_compute_node_element(cn)
+
+            # Build mapped instance tree
+            node_instance_uuids = self.get_node_instances(cn)
+            for instance_uuid in sorted(node_instance_uuids):
+                instance = self.get_instance_by_uuid(instance_uuid)
+                instance_el = self._build_instance_element(instance)
+                compute_node_el.append(instance_el)
+
+            root.append(compute_node_el)
+
+        # Build unmapped instance tree (i.e. not assigned to any compute node)
+        for instance in sorted(self.get_all_instances().values(),
+                               key=lambda inst: inst.uuid):
+            try:
+                self.get_node_by_instance_uuid(instance.uuid)
+            except exception.InstanceNotFound:
+                root.append(self._build_instance_element(instance))
+
+        return etree.tostring(root, pretty_print=True).decode('utf-8')

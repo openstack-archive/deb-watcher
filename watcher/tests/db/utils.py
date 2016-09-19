@@ -57,12 +57,14 @@ def get_test_audit(**kwargs):
         'audit_type': kwargs.get('audit_type', 'ONESHOT'),
         'state': kwargs.get('state'),
         'deadline': kwargs.get('deadline'),
-        'audit_template_id': kwargs.get('audit_template_id', 1),
         'created_at': kwargs.get('created_at'),
         'updated_at': kwargs.get('updated_at'),
         'deleted_at': kwargs.get('deleted_at'),
         'parameters': kwargs.get('parameters', {}),
         'interval': kwargs.get('period', 3600),
+        'goal_id': kwargs.get('goal_id', 1),
+        'strategy_id': kwargs.get('strategy_id', None),
+        'host_aggregate': kwargs.get('host_aggregate', 1),
     }
 
 
@@ -122,6 +124,7 @@ def get_test_action_plan(**kwargs):
         'uuid': kwargs.get('uuid', '76be87bd-3422-43f9-93a0-e85a577e3061'),
         'state': kwargs.get('state', 'ONGOING'),
         'audit_id': kwargs.get('audit_id', 1),
+        'strategy_id': kwargs.get('strategy_id', 1),
         'global_efficacy': kwargs.get('global_efficacy', {}),
         'first_action_id': kwargs.get('first_action_id', 1),
         'created_at': kwargs.get('created_at'),
@@ -168,6 +171,31 @@ def create_test_goal(**kwargs):
     goal = get_test_goal(**kwargs)
     dbapi = db_api.get_instance()
     return dbapi.create_goal(goal)
+
+
+def get_test_scoring_engine(**kwargs):
+    return {
+        'id': kwargs.get('id', 1),
+        'uuid': kwargs.get('uuid', 'e8370ede-4f39-11e6-9ffa-08002722cb21'),
+        'name': kwargs.get('name', 'test-se-01'),
+        'description': kwargs.get('description', 'test scoring engine 01'),
+        'metainfo': kwargs.get('metainfo', 'test_attr=test_val'),
+        'created_at': kwargs.get('created_at'),
+        'updated_at': kwargs.get('updated_at'),
+        'deleted_at': kwargs.get('deleted_at'),
+    }
+
+
+def create_test_scoring_engine(**kwargs):
+    """Create test scoring engine in DB and return ScoringEngine DB object.
+
+    Function to be used to create test ScoringEngine objects in the database.
+    :param kwargs: kwargs with overriding values for SE'sattributes.
+    :returns: Test ScoringEngine DB object.
+    """
+    scoring_engine = get_test_scoring_engine(**kwargs)
+    dbapi = db_api.get_instance()
+    return dbapi.create_scoring_engine(scoring_engine)
 
 
 def get_test_strategy(**kwargs):

@@ -18,10 +18,13 @@ import collections
 
 from oslo_log import log
 
-from watcher._i18n import _LE, _LI
+from watcher._i18n import _LI, _LW
 from watcher.common import context
 from watcher.decision_engine.loading import default
+from watcher.decision_engine.scoring import scoring_factory
 from watcher import objects
+from watcher.objects import action_plan as apobjects
+from watcher.objects import audit as auditobjects
 
 LOG = log.getLogger(__name__)
 
@@ -30,6 +33,9 @@ GoalMapping = collections.namedtuple(
 StrategyMapping = collections.namedtuple(
     'StrategyMapping',
     ['name', 'goal_name', 'display_name', 'parameters_spec'])
+ScoringEngineMapping = collections.namedtuple(
+    'ScoringEngineMapping',
+    ['name', 'description', 'metainfo'])
 
 IndicatorSpec = collections.namedtuple(
     'IndicatorSpec', ['name', 'description', 'unit', 'schema'])
@@ -48,12 +54,19 @@ class Syncer(object):
         self._available_strategies = None
         self._available_strategies_map = None
 
+        self._available_scoringengines = None
+        self._available_scoringengines_map = None
+
         # This goal mapping maps stale goal IDs to the synced goal
         self.goal_mapping = dict()
         # This strategy mapping maps stale strategy IDs to the synced goal
         self.strategy_mapping = dict()
+        # Maps stale scoring engine IDs to the synced scoring engines
+        self.se_mapping = dict()
 
         self.stale_audit_templates_map = {}
+        self.stale_audits_map = {}
+        self.stale_action_plans_map = {}
 
     @property
     def available_goals(self):
@@ -68,6 +81,14 @@ class Syncer(object):
         if self._available_strategies is None:
             self._available_strategies = objects.Strategy.list(self.ctx)
         return self._available_strategies
+
+    @property
+    def available_scoringengines(self):
+        """Scoring Engines loaded from DB"""
+        if self._available_scoringengines is None:
+            self._available_scoringengines = (objects.ScoringEngine
+                                              .list(self.ctx))
+        return self._available_scoringengines
 
     @property
     def available_goals_map(self):
@@ -97,10 +118,22 @@ class Syncer(object):
             }
         return self._available_strategies_map
 
+    @property
+    def available_scoringengines_map(self):
+        if self._available_scoringengines_map is None:
+            self._available_scoringengines_map = {
+                ScoringEngineMapping(
+                    name=s.id, description=s.description,
+                    metainfo=s.metainfo): s
+                for s in self.available_scoringengines
+            }
+        return self._available_scoringengines_map
+
     def sync(self):
         self.discovered_map = self._discover()
         goals_map = self.discovered_map["goals"]
         strategies_map = self.discovered_map["strategies"]
+        scoringengines_map = self.discovered_map["scoringengines"]
 
         for goal_name, goal_map in goals_map.items():
             if goal_map in self.available_goals_map:
@@ -118,7 +151,16 @@ class Syncer(object):
 
             self.strategy_mapping.update(self._sync_strategy(strategy_map))
 
-        self._sync_audit_templates()
+        for se_name, se_map in scoringengines_map.items():
+            if se_map in self.available_scoringengines_map:
+                LOG.info(_LI("Scoring Engine %s already exists"),
+                         se_name)
+                continue
+
+            self.se_mapping.update(self._sync_scoringengine(se_map))
+
+        self._sync_objects()
+        self._soft_delete_removed_scoringengines()
 
     def _sync_goal(self, goal_map):
         goal_name = goal_map.name
@@ -177,24 +219,70 @@ class Syncer(object):
 
         return strategy_mapping
 
-    def _sync_audit_templates(self):
-        # First we find audit templates that are stale because their associated
-        # goal or strategy has been modified and we update them in-memory
+    def _sync_scoringengine(self, scoringengine_map):
+        scoringengine_name = scoringengine_map.name
+        se_mapping = dict()
+        # Scoring Engines matching by id with discovered Scoring engine
+        matching_scoringengines = [se for se in self.available_scoringengines
+                                   if se.name == scoringengine_name]
+        stale_scoringengines = self._soft_delete_stale_scoringengines(
+            scoringengine_map, matching_scoringengines)
+
+        if stale_scoringengines or not matching_scoringengines:
+            scoringengine = objects.ScoringEngine(self.ctx)
+            scoringengine.name = scoringengine_name
+            scoringengine.description = scoringengine_map.description
+            scoringengine.metainfo = scoringengine_map.metainfo
+            scoringengine.create()
+            LOG.info(_LI("Scoring Engine %s created"), scoringengine_name)
+
+            # Updating the internal states
+            self.available_scoringengines_map[scoringengine] = \
+                scoringengine_map
+            # Map the old scoring engine names to the new (equivalent) SE
+            for matching_scoringengine in matching_scoringengines:
+                se_mapping[matching_scoringengine.name] = scoringengine
+
+        return se_mapping
+
+    def _sync_objects(self):
+        # First we find audit templates, audits and action plans that are stale
+        # because their associated goal or strategy has been modified and we
+        # update them in-memory
         self._find_stale_audit_templates_due_to_goal()
         self._find_stale_audit_templates_due_to_strategy()
 
-        # Then we handle the case where an audit template became
-        # stale because its related goal does not exist anymore.
+        self._find_stale_audits_due_to_goal()
+        self._find_stale_audits_due_to_strategy()
+
+        self._find_stale_action_plans_due_to_strategy()
+        self._find_stale_action_plans_due_to_audit()
+
+        # Then we handle the case where an audit template, an audit or an
+        # action plan becomes stale because its related goal does not
+        # exist anymore.
         self._soft_delete_removed_goals()
-        # Then we handle the case where an audit template became
-        # stale because its related strategy does not exist anymore.
+        # Then we handle the case where an audit template, an audit or an
+        # action plan becomes stale because its related strategy does not
+        # exist anymore.
         self._soft_delete_removed_strategies()
 
         # Finally, we save into the DB the updated stale audit templates
+        # and soft delete stale audits and action plans
         for stale_audit_template in self.stale_audit_templates_map.values():
             stale_audit_template.save()
             LOG.info(_LI("Audit Template '%s' synced"),
                      stale_audit_template.name)
+
+        for stale_audit in self.stale_audits_map.values():
+            stale_audit.save()
+            LOG.info(_LI("Stale audit '%s' synced and cancelled"),
+                     stale_audit.uuid)
+
+        for stale_action_plan in self.stale_action_plans_map.values():
+            stale_action_plan.save()
+            LOG.info(_LI("Stale action plan '%s' synced and cancelled"),
+                     stale_action_plan.uuid)
 
     def _find_stale_audit_templates_due_to_goal(self):
         for goal_id, synced_goal in self.goal_mapping.items():
@@ -228,6 +316,72 @@ class Syncer(object):
                     self.stale_audit_templates_map[
                         audit_template.id].strategy_id = synced_strategy.id
 
+    def _find_stale_audits_due_to_goal(self):
+        for goal_id, synced_goal in self.goal_mapping.items():
+            filters = {"goal_id": goal_id}
+            stale_audits = objects.Audit.list(
+                self.ctx, filters=filters)
+
+            # Update the goal ID for the stale audits (w/o saving)
+            for audit in stale_audits:
+                if audit.id not in self.stale_audits_map:
+                    audit.goal_id = synced_goal.id
+                    self.stale_audits_map[audit.id] = audit
+                else:
+                    self.stale_audits_map[audit.id].goal_id = synced_goal.id
+
+    def _find_stale_audits_due_to_strategy(self):
+        for strategy_id, synced_strategy in self.strategy_mapping.items():
+            filters = {"strategy_id": strategy_id}
+            stale_audits = objects.Audit.list(self.ctx, filters=filters)
+            # Update strategy IDs for all stale audits (w/o saving)
+            for audit in stale_audits:
+                if audit.id not in self.stale_audits_map:
+                    audit.strategy_id = synced_strategy.id
+                    audit.state = auditobjects.State.CANCELLED
+                    self.stale_audits_map[audit.id] = audit
+                else:
+                    self.stale_audits_map[
+                        audit.id].strategy_id = synced_strategy.id
+                    self.stale_audits_map[
+                        audit.id].state = auditobjects.State.CANCELLED
+
+    def _find_stale_action_plans_due_to_strategy(self):
+        for strategy_id, synced_strategy in self.strategy_mapping.items():
+            filters = {"strategy_id": strategy_id}
+            stale_action_plans = objects.ActionPlan.list(
+                self.ctx, filters=filters)
+
+            # Update strategy IDs for all stale action plans (w/o saving)
+            for action_plan in stale_action_plans:
+                if action_plan.id not in self.stale_action_plans_map:
+                    action_plan.strategy_id = synced_strategy.id
+                    action_plan.state = apobjects.State.CANCELLED
+                    self.stale_action_plans_map[action_plan.id] = action_plan
+                else:
+                    self.stale_action_plans_map[
+                        action_plan.id].strategy_id = synced_strategy.id
+                    self.stale_action_plans_map[
+                        action_plan.id].state = apobjects.State.CANCELLED
+
+    def _find_stale_action_plans_due_to_audit(self):
+        for audit_id, synced_audit in self.stale_audits_map.items():
+            filters = {"audit_id": audit_id}
+            stale_action_plans = objects.ActionPlan.list(
+                self.ctx, filters=filters)
+
+            # Update audit IDs for all stale action plans (w/o saving)
+            for action_plan in stale_action_plans:
+                if action_plan.id not in self.stale_action_plans_map:
+                    action_plan.audit_id = synced_audit.id
+                    action_plan.state = apobjects.State.CANCELLED
+                    self.stale_action_plans_map[action_plan.id] = action_plan
+                else:
+                    self.stale_action_plans_map[
+                        action_plan.id].audit_id = synced_audit.id
+                    self.stale_action_plans_map[
+                        action_plan.id].state = apobjects.State.CANCELLED
+
     def _soft_delete_removed_goals(self):
         removed_goals = [
             g for g in self.available_goals
@@ -235,12 +389,24 @@ class Syncer(object):
         for removed_goal in removed_goals:
             removed_goal.soft_delete()
             filters = {"goal_id": removed_goal.id}
+
             invalid_ats = objects.AuditTemplate.list(self.ctx, filters=filters)
             for at in invalid_ats:
                 LOG.warning(
-                    _LE("Audit Template '%(audit_template)s' references a "
-                        "goal that does not exist"),
-                    audit_template=at.uuid)
+                    _LW("Audit Template '%(audit_template)s' references a "
+                        "goal that does not exist"), audit_template=at.uuid)
+
+            stale_audits = objects.Audit.list(self.ctx, filters=filters)
+            for audit in stale_audits:
+                LOG.warning(
+                    _LW("Audit '%(audit)s' references a "
+                        "goal that does not exist"), audit=audit.uuid)
+                if audit.id not in self.stale_audits_map:
+                    audit.state = auditobjects.State.CANCELLED
+                    self.stale_audits_map[audit.id] = audit
+                else:
+                    self.stale_audits_map[
+                        audit.id].state = auditobjects.State.CANCELLED
 
     def _soft_delete_removed_strategies(self):
         removed_strategies = [
@@ -265,17 +431,55 @@ class Syncer(object):
                 else:
                     self.stale_audit_templates_map[at.id].strategy_id = None
 
+            stale_audits = objects.Audit.list(self.ctx, filters=filters)
+            for audit in stale_audits:
+                LOG.warning(
+                    _LW("Audit '%(audit)s' references a "
+                        "strategy that does not exist"), audit=audit.uuid)
+                if audit.id not in self.stale_audits_map:
+                    audit.state = auditobjects.State.CANCELLED
+                    self.stale_audits_map[audit.id] = audit
+                else:
+                    self.stale_audits_map[
+                        audit.id].state = auditobjects.State.CANCELLED
+
+            stale_action_plans = objects.ActionPlan.list(
+                self.ctx, filters=filters)
+            for action_plan in stale_action_plans:
+                LOG.warning(
+                    _LW("Action Plan '%(action_plan)s' references a "
+                        "strategy that does not exist"),
+                    action_plan=action_plan.uuid)
+                if action_plan.id not in self.stale_action_plans_map:
+                    action_plan.state = apobjects.State.CANCELLED
+                    self.stale_action_plans_map[action_plan.id] = action_plan
+                else:
+                    self.stale_action_plans_map[
+                        action_plan.id].state = apobjects.State.CANCELLED
+
+    def _soft_delete_removed_scoringengines(self):
+        removed_se = [
+            se for se in self.available_scoringengines
+            if se.name not in self.discovered_map['scoringengines']]
+        for se in removed_se:
+            LOG.info(_LI("Scoring Engine %s removed"), se.name)
+            se.soft_delete()
+
     def _discover(self):
         strategies_map = {}
         goals_map = {}
-        discovered_map = {"goals": goals_map, "strategies": strategies_map}
+        scoringengines_map = {}
+        discovered_map = {
+            "goals": goals_map,
+            "strategies": strategies_map,
+            "scoringengines": scoringengines_map}
         goal_loader = default.DefaultGoalLoader()
         implemented_goals = goal_loader.list_available()
 
         strategy_loader = default.DefaultStrategyLoader()
         implemented_strategies = strategy_loader.list_available()
 
-        for _, goal_cls in implemented_goals.items():
+        for goal_cls in implemented_goals.values():
             goals_map[goal_cls.get_name()] = GoalMapping(
                 name=goal_cls.get_name(),
                 display_name=goal_cls.get_translatable_display_name(),
@@ -284,12 +488,18 @@ class Syncer(object):
                     for indicator in goal_cls.get_efficacy_specification(
                     ).get_indicators_specifications()))
 
-        for _, strategy_cls in implemented_strategies.items():
+        for strategy_cls in implemented_strategies.values():
             strategies_map[strategy_cls.get_name()] = StrategyMapping(
                 name=strategy_cls.get_name(),
                 goal_name=strategy_cls.get_goal_name(),
                 display_name=strategy_cls.get_translatable_display_name(),
                 parameters_spec=str(strategy_cls.get_schema()))
+
+        for se in scoring_factory.get_scoring_engine_list():
+            scoringengines_map[se.get_name()] = ScoringEngineMapping(
+                name=se.get_name(),
+                description=se.get_description(),
+                metainfo=se.get_metainfo())
 
         return discovered_map
 
@@ -334,3 +544,21 @@ class Syncer(object):
                 stale_strategies.append(matching_strategy)
 
         return stale_strategies
+
+    def _soft_delete_stale_scoringengines(
+            self, scoringengine_map, matching_scoringengines):
+        se_name = scoringengine_map.name
+        se_description = scoringengine_map.description
+        se_metainfo = scoringengine_map.metainfo
+
+        stale_scoringengines = []
+        for matching_scoringengine in matching_scoringengines:
+            if (matching_scoringengine.description == se_description and
+                    matching_scoringengine.metainfo == se_metainfo):
+                LOG.info(_LI("Scoring Engine %s unchanged"), se_name)
+            else:
+                LOG.info(_LI("Scoring Engine %s modified"), se_name)
+                matching_scoringengine.soft_delete()
+                stale_scoringengines.append(matching_scoringengine)
+
+        return stale_scoringengines

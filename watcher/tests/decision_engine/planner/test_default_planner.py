@@ -37,7 +37,7 @@ class SolutionFaker(object):
         metrics = fake.FakerMetricsCollector()
         current_state_cluster = faker_cluster_state.FakerModelCollector()
         sercon = strategies.BasicConsolidation(config=mock.Mock())
-        sercon._model = current_state_cluster.generate_scenario_1()
+        sercon._compute_model = current_state_cluster.generate_scenario_1()
         sercon.ceilometer = mock.MagicMock(
             get_statistics=metrics.mock_get_statistics)
         return sercon.execute()
@@ -49,8 +49,8 @@ class SolutionFakerSingleHyp(object):
         metrics = fake.FakerMetricsCollector()
         current_state_cluster = faker_cluster_state.FakerModelCollector()
         sercon = strategies.BasicConsolidation(config=mock.Mock())
-        sercon._model = (
-            current_state_cluster.generate_scenario_3_with_2_hypervisors())
+        sercon._compute_model = (
+            current_state_cluster.generate_scenario_3_with_2_nodes())
         sercon.ceilometer = mock.MagicMock(
             get_statistics=metrics.mock_get_statistics)
 
@@ -59,26 +59,32 @@ class SolutionFakerSingleHyp(object):
 
 class TestActionScheduling(base.DbTestCase):
 
+    def setUp(self):
+        super(TestActionScheduling, self).setUp()
+        self.strategy = db_utils.create_test_strategy(name="dummy")
+        self.audit = db_utils.create_test_audit(
+            uuid=utils.generate_uuid(), strategy_id=self.strategy.id)
+        self.default_planner = pbase.DefaultPlanner(mock.Mock())
+
     def test_schedule_actions(self):
-        default_planner = pbase.DefaultPlanner(mock.Mock())
-        audit = db_utils.create_test_audit(uuid=utils.generate_uuid())
         solution = dsol.DefaultSolution(
-            goal=mock.Mock(), strategy=mock.Mock())
+            goal=mock.Mock(), strategy=self.strategy)
 
         parameters = {
-            "src_uuid_hypervisor": "server1",
-            "dst_uuid_hypervisor": "server2",
+            "source_node": "server1",
+            "destination_node": "server2",
         }
         solution.add_action(action_type="migrate",
                             resource_id="b199db0c-1408-4d52-b5a5-5ca14de0ff36",
                             input_parameters=parameters)
 
         with mock.patch.object(
-                pbase.DefaultPlanner, "create_action",
-                wraps=default_planner.create_action) as m_create_action:
-            default_planner.config.weights = {'migrate': 3}
-            action_plan = default_planner.schedule(self.context,
-                                                   audit.id, solution)
+            pbase.DefaultPlanner, "create_action",
+            wraps=self.default_planner.create_action
+        ) as m_create_action:
+            self.default_planner.config.weights = {'migrate': 3}
+            action_plan = self.default_planner.schedule(
+                self.context, self.audit.id, solution)
 
         self.assertIsNotNone(action_plan.uuid)
         self.assertEqual(1, m_create_action.call_count)
@@ -87,14 +93,12 @@ class TestActionScheduling(base.DbTestCase):
         self.assertEqual("migrate", actions[0].action_type)
 
     def test_schedule_two_actions(self):
-        default_planner = pbase.DefaultPlanner(mock.Mock())
-        audit = db_utils.create_test_audit(uuid=utils.generate_uuid())
         solution = dsol.DefaultSolution(
-            goal=mock.Mock(), strategy=mock.Mock())
+            goal=mock.Mock(), strategy=self.strategy)
 
         parameters = {
-            "src_uuid_hypervisor": "server1",
-            "dst_uuid_hypervisor": "server2",
+            "source_node": "server1",
+            "destination_node": "server2",
         }
         solution.add_action(action_type="migrate",
                             resource_id="b199db0c-1408-4d52-b5a5-5ca14de0ff36",
@@ -105,11 +109,12 @@ class TestActionScheduling(base.DbTestCase):
                             input_parameters={})
 
         with mock.patch.object(
-                pbase.DefaultPlanner, "create_action",
-                wraps=default_planner.create_action) as m_create_action:
-            default_planner.config.weights = {'migrate': 3, 'nop': 0}
-            action_plan = default_planner.schedule(self.context,
-                                                   audit.id, solution)
+            pbase.DefaultPlanner, "create_action",
+            wraps=self.default_planner.create_action
+        ) as m_create_action:
+            self.default_planner.config.weights = {'migrate': 3, 'nop': 0}
+            action_plan = self.default_planner.schedule(
+                self.context, self.audit.id, solution)
         self.assertIsNotNone(action_plan.uuid)
         self.assertEqual(2, m_create_action.call_count)
         # check order
@@ -119,14 +124,12 @@ class TestActionScheduling(base.DbTestCase):
         self.assertEqual("migrate", actions[1].action_type)
 
     def test_schedule_actions_with_unknown_action(self):
-        default_planner = pbase.DefaultPlanner(mock.Mock())
-        audit = db_utils.create_test_audit(uuid=utils.generate_uuid())
         solution = dsol.DefaultSolution(
-            goal=mock.Mock(), strategy=mock.Mock())
+            goal=mock.Mock(), strategy=self.strategy)
 
         parameters = {
-            "src_uuid_hypervisor": "server1",
-            "dst_uuid_hypervisor": "server2",
+            "src_uuid_node": "server1",
+            "dst_uuid_node": "server2",
         }
         solution.add_action(action_type="migrate",
                             resource_id="b199db0c-1408-4d52-b5a5-5ca14de0ff36",
@@ -137,11 +140,12 @@ class TestActionScheduling(base.DbTestCase):
                             input_parameters={})
 
         with mock.patch.object(
-                pbase.DefaultPlanner, "create_action",
-                wraps=default_planner.create_action) as m_create_action:
-            default_planner.config.weights = {'migrate': 0}
-            self.assertRaises(KeyError, default_planner.schedule,
-                              self.context, audit.id, solution)
+            pbase.DefaultPlanner, "create_action",
+            wraps=self.default_planner.create_action
+        ) as m_create_action:
+            self.default_planner.config.weights = {'migrate': 0}
+            self.assertRaises(KeyError, self.default_planner.schedule,
+                              self.context, self.audit.id, solution)
         self.assertEqual(2, m_create_action.call_count)
 
 
@@ -158,6 +162,7 @@ class TestDefaultPlanner(base.DbTestCase):
         }
 
         obj_utils.create_test_audit_template(self.context)
+        self.strategy = obj_utils.create_test_strategy(self.context)
 
         p = mock.patch.object(db_api.BaseConnection, 'create_action_plan')
         self.mock_create_action_plan = p.start()
@@ -179,14 +184,18 @@ class TestDefaultPlanner(base.DbTestCase):
         action.create()
         return action
 
-    def test_schedule_scheduled_empty(self):
+    @mock.patch.object(objects.Strategy, 'get_by_name')
+    def test_schedule_scheduled_empty(self, m_get_by_name):
+        m_get_by_name.return_value = self.strategy
         audit = db_utils.create_test_audit(uuid=utils.generate_uuid())
         fake_solution = SolutionFakerSingleHyp.build()
         action_plan = self.default_planner.schedule(self.context,
                                                     audit.id, fake_solution)
         self.assertIsNotNone(action_plan.uuid)
 
-    def test_scheduler_warning_empty_action_plan(self):
+    @mock.patch.object(objects.Strategy, 'get_by_name')
+    def test_scheduler_warning_empty_action_plan(self, m_get_by_name):
+        m_get_by_name.return_value = self.strategy
         audit = db_utils.create_test_audit(uuid=utils.generate_uuid())
         fake_solution = SolutionFaker.build()
         action_plan = self.default_planner.schedule(self.context,

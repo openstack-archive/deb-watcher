@@ -33,7 +33,7 @@ class TestDummyStrategy(base.TestCase):
         self.fake_cluster = faker_cluster_state.FakerModelCollector()
 
         p_model = mock.patch.object(
-            strategies.DummyStrategy, "model",
+            strategies.DummyStrategy, "compute_model",
             new_callable=mock.PropertyMock)
         self.m_model = p_model.start()
         self.addCleanup(p_model.stop)
@@ -52,7 +52,7 @@ class TestDummyStrategy(base.TestCase):
         self.assertEqual(3, len(solution.actions))
 
     def test_check_parameters(self):
-        model = self.fake_cluster.generate_scenario_3_with_2_hypervisors()
+        model = self.fake_cluster.generate_scenario_3_with_2_nodes()
         self.m_model.return_value = model
         self.strategy.input_parameters = utils.Struct()
         self.strategy.input_parameters.update({'para1': 4.0, 'para2': 'Hi'})

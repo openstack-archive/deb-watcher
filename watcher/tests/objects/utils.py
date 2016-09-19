@@ -100,16 +100,6 @@ def create_test_action_plan(context, **kw):
     return action_plan
 
 
-def create_action_plan_without_audit(context, **kw):
-    """Create and return a test action_plan object.
-
-    Create a action plan in the DB and return a ActionPlan object with
-    appropriate attributes.
-    """
-    kw['audit_id'] = None
-    return create_test_action_plan(context, **kw)
-
-
 def get_test_action(context, **kw):
     """Return a Action object with appropriate attributes.
 
@@ -162,6 +152,30 @@ def create_test_goal(context, **kw):
     goal = get_test_goal(context, **kw)
     goal.create()
     return goal
+
+
+def get_test_scoring_engine(context, **kw):
+    """Return a ScoringEngine object with appropriate attributes.
+
+    NOTE: The object leaves the attributes marked as changed, such
+    that a create() could be used to commit it to the DB.
+    """
+    db_scoring_engine = db_utils.get_test_scoring_engine(**kw)
+    scoring_engine = objects.ScoringEngine(context)
+    for key in db_scoring_engine:
+        setattr(scoring_engine, key, db_scoring_engine[key])
+    return scoring_engine
+
+
+def create_test_scoring_engine(context, **kw):
+    """Create and return a test scoring engine object.
+
+    Create a scoring engine in the DB and return a ScoringEngine object with
+    appropriate attributes.
+    """
+    scoring_engine = get_test_scoring_engine(context, **kw)
+    scoring_engine.create()
+    return scoring_engine
 
 
 def get_test_strategy(context, **kw):

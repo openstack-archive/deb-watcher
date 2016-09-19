@@ -39,10 +39,10 @@ named ``watcher``, or by using the `OpenStack CLI`_ ``openstack``.
 If you want to deploy Watcher in Horizon, please refer to the `Watcher Horizon
 plugin installation guide`_.
 
-.. _`installation guide`: https://factory.b-com.com/www/watcher/doc/python-watcherclient
-.. _`Watcher Horizon plugin installation guide`: https://factory.b-com.com/www/watcher/doc/watcher-dashboard/deploy/installation.html
+.. _`installation guide`: http://docs.openstack.org/developer/python-watcherclient
+.. _`Watcher Horizon plugin installation guide`: http://docs.openstack.org/developer/watcher-dashboard/deploy/installation.html
 .. _`OpenStack CLI`: http://docs.openstack.org/developer/python-openstackclient/man/openstack.html
-.. _`Watcher CLI`: https://factory.b-com.com/www/watcher/doc/python-watcherclient/index.html
+.. _`Watcher CLI`: http://docs.openstack.org/developer/python-watcherclient/index.html
 
 Seeing what the Watcher CLI can do ?
 ------------------------------------
@@ -172,7 +172,7 @@ Input parameter could cause audit creation failure, when:
 
 Watcher service will compute an :ref:`Action Plan <action_plan_definition>`
 composed of a list of potential optimization :ref:`actions <action_definition>`
-(instance migration, disabling of an hypervisor, ...) according to the
+(instance migration, disabling of a compute node, ...) according to the
 :ref:`goal <goal_definition>` to achieve. You can see all of the goals
 available in section ``[watcher_strategies]`` of the Watcher service
 configuration file.

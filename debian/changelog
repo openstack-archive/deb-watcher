@@ -1,8 +1,11 @@
-watcher (0.28.0-3) UNRELEASED; urgency=medium
+watcher (0.30.0-1) experimental; urgency=medium
 
+  * New upstream release.
+  * Fixed (build-)depends for this release.
+  * Using OpenStack's Gerrit as VCS URLs.
   * Fix missing EPOC in many (build-)depends.
 
- -- Thomas Goirand <zigo@debian.org>  Wed, 20 Jul 2016 12:05:51 +0200
+ -- Thomas Goirand <zigo@debian.org>  Mon, 19 Sep 2016 12:01:59 +0200
 
 watcher (0.28.0-2) experimental; urgency=medium
 

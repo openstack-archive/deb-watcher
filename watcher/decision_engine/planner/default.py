@@ -48,10 +48,11 @@ class DefaultPlanner(base.BasePlanner):
 
     @classmethod
     def get_config_opts(cls):
-        return [cfg.DictOpt(
-            'weights',
-            help="These weights are used to schedule the actions",
-            default=cls.weights_dict),
+        return [
+            cfg.DictOpt(
+                'weights',
+                help="These weights are used to schedule the actions",
+                default=cls.weights_dict),
         ]
 
     def create_action(self,
@@ -67,10 +68,11 @@ class DefaultPlanner(base.BasePlanner):
             'state': objects.action.State.PENDING,
             'next': None,
         }
+
         return action
 
     def schedule(self, context, audit_id, solution):
-        LOG.debug('Create an action plan for the audit uuid: %s ', audit_id)
+        LOG.debug('Creating an action plan for the audit uuid: %s', audit_id)
         priorities = self.config.weights
         action_plan = self._create_action_plan(context, audit_id, solution)
 
@@ -92,6 +94,7 @@ class DefaultPlanner(base.BasePlanner):
         if len(scheduled) == 0:
             LOG.warning(_LW("The action plan is empty"))
             action_plan.first_action_id = None
+            action_plan.state = objects.action_plan.State.SUCCEEDED
             action_plan.save()
         else:
             # create the first action
@@ -112,9 +115,13 @@ class DefaultPlanner(base.BasePlanner):
         return action_plan
 
     def _create_action_plan(self, context, audit_id, solution):
+        strategy = objects.Strategy.get_by_name(
+            context, solution.strategy.name)
+
         action_plan_dict = {
             'uuid': utils.generate_uuid(),
             'audit_id': audit_id,
+            'strategy_id': strategy.id,
             'first_action_id': None,
             'state': objects.action_plan.State.RECOMMENDED,
             'global_efficacy': solution.global_efficacy,
@@ -145,7 +152,7 @@ class DefaultPlanner(base.BasePlanner):
 
     def _create_action(self, context, _action, parent_action):
         try:
-            LOG.debug("Creating the %s in watcher db",
+            LOG.debug("Creating the %s in the Watcher database",
                       _action.get("action_type"))
 
             new_action = objects.Action(context, **_action)
