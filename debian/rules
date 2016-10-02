@@ -33,9 +33,19 @@ override_dh_install:
 		--wrap-width 140 \
 		--namespace watcher \
 		--namespace keystonemiddleware.auth_token \
-		--namespace oslo.log \
+		--namespace oslo.cache \
+		--namespace oslo.concurrency \
 		--namespace oslo.db \
-		--namespace oslo.messaging
+		--namespace oslo.log \
+		--namespace oslo.messaging \
+		--namespace oslo.policy \
+		--namespace oslo.reports \
+		--namespace oslo.service.periodic_task \
+		--namespace oslo.service.service \
+		--namespace oslo.service.wsgi
+
+	pkgos-fix-config-default $(CURDIR)/debian/watcher-common/usr/share/watcher-common/watcher.conf oslo_concurrency lock_path /var/lock/watcher
+
 	dh_install --fail-missing
 
 	# Disable https in default setup, as this makes our CI fail
