@@ -1,0 +1,9 @@
+Code-Review+2: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Code-Review+1: Nishant Kumar <nishant.e.kumar@ericsson.com>
+Workflow+1: Jean-Emile DARTOIS <jean-emile.dartois@b-com.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 04 Oct 2016 16:36:26 +0000
+Reviewed-on: https://review.openstack.org/381223
+Project: openstack/deb-watcher
+Branch: refs/heads/master
