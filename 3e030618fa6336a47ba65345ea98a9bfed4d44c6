@@ -1,0 +1,9 @@
+Code-Review+2: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Code-Review+2: David TARDIVEL <David.TARDIVEL@b-com.com>
+Workflow+1: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 20 Oct 2016 08:24:03 +0000
+Reviewed-on: https://review.openstack.org/388755
+Project: openstack/deb-watcher
+Branch: refs/heads/stable/newton
