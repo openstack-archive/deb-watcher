@@ -1,0 +1,11 @@
+Code-Review+2: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Code-Review+1: Atul Pandey <atul.pandey@nectechnologies.in>
+Code-Review+1: Hidekazu Nakamura <hid-nakamura@vf.jp.nec.com>
+Code-Review+1: Bruno Grazioli <gaea@zhaw.ch>
+Workflow+1: David TARDIVEL <David.TARDIVEL@b-com.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Mon, 14 Nov 2016 15:09:57 +0000
+Reviewed-on: https://review.openstack.org/394635
+Project: openstack/deb-watcher
+Branch: refs/heads/master
