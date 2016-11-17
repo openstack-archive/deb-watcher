@@ -1,0 +1,11 @@
+Code-Review+2: David TARDIVEL <David.TARDIVEL@b-com.com>
+Code-Review+1: Bruno Grazioli <gaea@zhaw.ch>
+Code-Review+1: Susanne Balle <sleipnir012@gmail.com>
+Code-Review+1: Shaifali Agrawal <agrawalshaifali09@gmail.com>
+Workflow+1: David TARDIVEL <David.TARDIVEL@b-com.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 16 Nov 2016 16:43:43 +0000
+Reviewed-on: https://review.openstack.org/393703
+Project: openstack/deb-watcher
+Branch: refs/heads/master

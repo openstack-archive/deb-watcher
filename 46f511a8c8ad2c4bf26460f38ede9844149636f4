@@ -1,0 +1,8 @@
+Code-Review+2: David TARDIVEL <David.TARDIVEL@b-com.com>
+Workflow+1: David TARDIVEL <David.TARDIVEL@b-com.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 16 Nov 2016 17:24:45 +0000
+Reviewed-on: https://review.openstack.org/396281
+Project: openstack/deb-watcher
+Branch: refs/heads/master
