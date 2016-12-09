@@ -12,6 +12,10 @@ if [ "$1" = "configure" ] || [ "$1" = "reconfigure" ] ; then
 
 	pkgos_var_user_group watcher
 
+	# Needed at runtime
+	mkdir /var/cache/watcher
+	chown watcher:watcher /var/cache/watcher
+
 	pkgos_write_new_conf watcher policy.json
 	pkgos_write_new_conf watcher watcher.conf
 	db_get watcher/configure_db

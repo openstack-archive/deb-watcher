@@ -1,8 +1,13 @@
-watcher (0.30.0-3) UNRELEASED; urgency=medium
+watcher (0.30.0-3) unstable; urgency=medium
 
+  [ Ondřej Nový ]
   * Bumped debhelper compat version to 10
 
- -- Ondřej Nový <onovy@debian.org>  Thu, 24 Nov 2016 00:14:50 +0100
+  [ Thomas Goirand ]
+  * Allow using SQLA >= 1.1 (patching requirements.txt).
+  * Create /var/cache/watcher in postinst.
+
+ -- Thomas Goirand <zigo@debian.org>  Fri, 09 Dec 2016 18:12:45 +0100
 
 watcher (0.30.0-2) unstable; urgency=medium
 
