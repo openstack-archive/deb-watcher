@@ -1,0 +1,8 @@
+Code-Review+2: Thomas Goirand <thomas@goirand.fr>
+Workflow+1: Thomas Goirand <thomas@goirand.fr>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 13 Dec 2016 16:56:05 +0000
+Reviewed-on: https://review.openstack.org/409264
+Project: openstack/deb-watcher
+Branch: refs/heads/debian/newton
