@@ -1,0 +1,9 @@
+Code-Review+2: David TARDIVEL <David.TARDIVEL@b-com.com>
+Code-Review+1: Rong Han <han.rong3@zte.com.cn>
+Workflow+1: David TARDIVEL <David.TARDIVEL@b-com.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 14 Dec 2016 18:48:14 +0000
+Reviewed-on: https://review.openstack.org/401006
+Project: openstack/deb-watcher
+Branch: refs/heads/master
