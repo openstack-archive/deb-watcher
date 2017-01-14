@@ -1,0 +1,10 @@
+Code-Review+1: Rong Han <han.rong3@zte.com.cn>
+Code-Review+2: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Code-Review+1: Hidekazu Nakamura <hid-nakamura@vf.jp.nec.com>
+Workflow+1: David TARDIVEL <David.TARDIVEL@b-com.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 13 Jan 2017 17:07:29 +0000
+Reviewed-on: https://review.openstack.org/403718
+Project: openstack/deb-watcher
+Branch: refs/heads/master
