@@ -1,3 +1,10 @@
+watcher (0.30.0-4) unstable; urgency=medium
+
+  * Team upload.
+  * Create /var/cache/watcher with no error if existing. (Closes: #851260)
+
+ -- Ondřej Kobližek <koblizeko@gmail.com>  Mon, 16 Jan 2017 13:20:05 +0100
+
 watcher (0.30.0-3) unstable; urgency=medium
 
   [ Ondřej Nový ]
