@@ -1,0 +1,10 @@
+Code-Review+1: Chris Spencer <christopher.m.spencer@intel.com>
+Code-Review+1: Prudhvi Rao Shedimbi <prudhvi.rao.shedimbi@intel.com>
+Code-Review+2: Alexander Chadin <a.chadin@servionica.ru>
+Workflow+1: David TARDIVEL <David.TARDIVEL@b-com.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 03 Feb 2017 08:48:56 +0000
+Reviewed-on: https://review.openstack.org/421268
+Project: openstack/deb-watcher
+Branch: refs/heads/master
