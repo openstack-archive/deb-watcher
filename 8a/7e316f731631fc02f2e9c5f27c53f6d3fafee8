@@ -1,0 +1,8 @@
+Code-Review+2: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Workflow+1: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 16 Feb 2017 13:52:06 +0000
+Reviewed-on: https://review.openstack.org/434899
+Project: openstack/deb-watcher
+Branch: refs/heads/stable/ocata
