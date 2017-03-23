@@ -1,0 +1,11 @@
+Code-Review+2: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Code-Review+1: Prudhvi Rao Shedimbi <prudhvi.rao.shedimbi@intel.com>
+Code-Review+1: Chris Spencer <christopher.m.spencer@intel.com>
+Code-Review+1: Hidekazu Nakamura <hid-nakamura@vf.jp.nec.com>
+Workflow+1: Jean-Emile DARTOIS <jean-emile.dartois@b-com.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 16 Feb 2017 13:23:47 +0000
+Reviewed-on: https://review.openstack.org/432835
+Project: openstack/deb-watcher
+Branch: refs/heads/master

@@ -1,0 +1,10 @@
+Code-Review+2: licanwei <li.canwei2@zte.com.cn>
+Code-Review+1: Eric Xie <eric_xiett@163.com>
+Code-Review+2: Prudhvi Rao Shedimbi <prudhvi.rao.shedimbi@intel.com>
+Workflow+1: licanwei <li.canwei2@zte.com.cn>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Mon, 06 Mar 2017 03:30:47 +0000
+Reviewed-on: https://review.openstack.org/440485
+Project: openstack/deb-watcher
+Branch: refs/heads/master
