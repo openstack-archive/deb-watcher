@@ -1,0 +1,10 @@
+Code-Review+1: Chris Spencer <christopher.m.spencer@intel.com>
+Code-Review+1: Margarita Shakhova <shakhova.margarita@gmail.com>
+Code-Review+2: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Workflow+1: Hidekazu Nakamura <hid-nakamura@vf.jp.nec.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 24 Mar 2017 09:00:33 +0000
+Reviewed-on: https://review.openstack.org/438530
+Project: openstack/deb-watcher
+Branch: refs/heads/master
