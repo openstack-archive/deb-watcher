@@ -1,0 +1,11 @@
+Code-Review+2: Hidekazu Nakamura <hid-nakamura@vf.jp.nec.com>
+Code-Review+1: Ivan Zinoviev <zinoviev.ii@gmail.com>
+Code-Review+2: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Code-Review+1: Margarita Shakhova <shakhova.margarita@gmail.com>
+Workflow+1: Prudhvi Rao Shedimbi <prudhvi.rao.shedimbi@intel.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Mon, 27 Mar 2017 22:46:30 +0000
+Reviewed-on: https://review.openstack.org/440927
+Project: openstack/deb-watcher
+Branch: refs/heads/master
