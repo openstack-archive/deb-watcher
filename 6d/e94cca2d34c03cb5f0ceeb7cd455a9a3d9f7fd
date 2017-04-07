@@ -1,0 +1,10 @@
+Code-Review+2: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Code-Review+1: Chris Spencer <christopher.m.spencer@intel.com>
+Code-Review+2: Alexander Chadin <a.chadin@servionica.ru>
+Workflow+1: Alexander Chadin <a.chadin@servionica.ru>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 07 Apr 2017 12:49:33 +0000
+Reviewed-on: https://review.openstack.org/451221
+Project: openstack/deb-watcher
+Branch: refs/heads/master
