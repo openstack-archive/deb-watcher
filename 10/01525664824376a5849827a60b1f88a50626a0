@@ -1,0 +1,9 @@
+Code-Review+2: licanwei <li.canwei2@zte.com.cn>
+Code-Review+2: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Workflow+1: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Sat, 27 May 2017 12:23:06 +0000
+Reviewed-on: https://review.openstack.org/468498
+Project: openstack/deb-watcher
+Branch: refs/heads/master
