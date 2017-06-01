@@ -1,0 +1,9 @@
+Code-Review+2: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Code-Review+1: Akihito INOH <aki-inou@rs.jp.nec.com>
+Workflow+1: Hidekazu Nakamura <hid-nakamura@vf.jp.nec.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 01 Jun 2017 04:38:16 +0000
+Reviewed-on: https://review.openstack.org/463281
+Project: openstack/deb-watcher
+Branch: refs/heads/master
