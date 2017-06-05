@@ -1,0 +1,11 @@
+Code-Review+1: Akihito INOH <aki-inou@rs.jp.nec.com>
+Code-Review+1: aditi sharma <aditi.s@nectechnologies.in>
+Code-Review+2: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Code-Review+2: licanwei <li.canwei2@zte.com.cn>
+Workflow+1: licanwei <li.canwei2@zte.com.cn>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Mon, 05 Jun 2017 08:37:45 +0000
+Reviewed-on: https://review.openstack.org/469336
+Project: openstack/deb-watcher
+Branch: refs/heads/master
