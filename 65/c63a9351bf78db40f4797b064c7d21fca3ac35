@@ -1,0 +1,8 @@
+Code-Review+2: Vincent Françoise <Vincent.FRANCOISE@b-com.com>
+Workflow+1: Hidekazu Nakamura <hid-nakamura@vf.jp.nec.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 14 Jun 2017 02:27:25 +0000
+Reviewed-on: https://review.openstack.org/470830
+Project: openstack/deb-watcher
+Branch: refs/heads/master
