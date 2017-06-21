@@ -1,0 +1,9 @@
+Code-Review+2: licanwei <li.canwei2@zte.com.cn>
+Code-Review+2: Alexander Chadin <a.chadin@servionica.ru>
+Workflow+1: Alexander Chadin <a.chadin@servionica.ru>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 21 Jun 2017 10:01:02 +0000
+Reviewed-on: https://review.openstack.org/475569
+Project: openstack/deb-watcher
+Branch: refs/heads/master
