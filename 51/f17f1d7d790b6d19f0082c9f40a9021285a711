@@ -1,0 +1,9 @@
+Code-Review+2: Hidekazu Nakamura <hid-nakamura@vf.jp.nec.com>
+Code-Review+2: licanwei <li.canwei2@zte.com.cn>
+Workflow+1: licanwei <li.canwei2@zte.com.cn>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 28 Jun 2017 06:09:56 +0000
+Reviewed-on: https://review.openstack.org/478123
+Project: openstack/deb-watcher
+Branch: refs/heads/master
