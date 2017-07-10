@@ -1,0 +1,9 @@
+Code-Review+2: Hidekazu Nakamura <hid-nakamura@vf.jp.nec.com>
+Code-Review+2: Alexander Chadin <a.chadin@servionica.ru>
+Workflow+1: Alexander Chadin <a.chadin@servionica.ru>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Mon, 10 Jul 2017 13:53:01 +0000
+Reviewed-on: https://review.openstack.org/482016
+Project: openstack/deb-watcher
+Branch: refs/heads/master
