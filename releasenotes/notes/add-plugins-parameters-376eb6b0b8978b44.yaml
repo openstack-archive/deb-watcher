@@ -1,8 +1,0 @@
----
-features:
-  - Added a standard way to both declare and fetch
-    configuration options so that whenever the
-    administrator generates the Watcher
-    configuration sample file, it contains the
-    configuration options of the plugins that are
-    currently available.

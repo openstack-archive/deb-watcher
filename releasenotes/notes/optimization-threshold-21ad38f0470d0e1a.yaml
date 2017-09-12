@@ -1,5 +1,0 @@
----
-features:
-  - Allow decision engine to pass strategy parameters,
-    like optimization threshold, to selected strategy,
-    also strategy to provide parameters info to end user.

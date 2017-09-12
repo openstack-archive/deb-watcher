@@ -1,6 +1,0 @@
----
-features:
-  - Copy all audit templates parameters into
-    audit instead of having a reference to the
-    audit template.
-

@@ -1,4 +1,0 @@
----
-features:
-  - Watcher can now run specific actions in parallel improving the performances
-    dramatically when executing an action plan.

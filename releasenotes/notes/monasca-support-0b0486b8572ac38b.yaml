@@ -1,4 +1,0 @@
----
-features:
-  - Watcher supports multiple metrics backend and relies on Ceilometer and
-    Monasca.
